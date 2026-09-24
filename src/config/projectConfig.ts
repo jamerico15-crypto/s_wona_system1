@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { FolderKanban, BarChart3, Stethoscope, Users, MapPin } from 'lucide-react';
+import { FolderKanban, BarChart3, Stethoscope, Users, MapPin, GraduationCap, Megaphone, Shield, Sprout, Receipt } from 'lucide-react';
 
 export const OLIKANASSA_ID = '382993897816064';
 
@@ -16,8 +16,13 @@ export const CATEGORIES: CategoryConfig[] = [
     id: 'gestao',
     label: 'Gestão',
     icon: FolderKanban,
-    collections: ['projetos', 'goals'],
-    displayNames: {},
+    collections: ['projetos', 'goals', 'despesas', 'diario_de_bordo', 'tarefas', 'report_settings'],
+    displayNames: {
+      despesas: 'Despesas',
+      diario_de_bordo: 'Diário de Bordo',
+      tarefas: 'Tarefas',
+      report_settings: 'Configurações de Relatórios',
+    },
   },
   {
     id: 'ma',
@@ -30,26 +35,82 @@ export const CATEGORIES: CategoryConfig[] = [
     id: 'core',
     label: 'Core Clínico (Lepra)',
     icon: Stethoscope,
-    collections: ['screenings'],
-    displayNames: { screenings: 'Dados Clínicos / Lepra' },
+    collections: ['screenings', 'pspark_casos_de_lepra'],
+    displayNames: {
+      screenings: 'Dados Clínicos / Lepra',
+      pspark_casos_de_lepra: 'Casos de Lepra (PSpark)',
+    },
   },
   {
     id: 'comunidade',
     label: 'Comunidade e Beneficiários',
     icon: Users,
-    collections: ['members', 'liderancas', 'groups'],
+    collections: ['members', 'liderancas', 'groups', 'food_security_support', 'activity_attendance', 'group_activities'],
     displayNames: {
       members: 'Beneficiários',
       liderancas: 'Lideranças Comunitárias',
       groups: 'Grupos de Poupança/Auto-Cuidado',
+      food_security_support: 'Apoio à Segurança Alimentar',
+      activity_attendance: 'Presença em Atividades',
+      group_activities: 'Atividades de Grupo',
     },
   },
   {
     id: 'logistica',
     label: 'Logística e Locais',
     icon: MapPin,
-    collections: ['districts', 'villages', 'health_posts'],
-    displayNames: {},
+    collections: ['districts', 'villages', 'health_posts', 'health_workers'],
+    displayNames: {
+      health_workers: 'Profissionais de Saúde',
+    },
+  },
+  {
+    id: 'formacao',
+    label: 'Formação e Capacitação',
+    icon: GraduationCap,
+    collections: ['training_courses', 'health_training_attendees', 'livelihood_training_attendees'],
+    displayNames: {
+      training_courses: 'Cursos de Formação',
+      health_training_attendees: 'Formandos (Saúde)',
+      livelihood_training_attendees: 'Formandos (Sustento)',
+    },
+  },
+  {
+    id: 'comunicacao',
+    label: 'Comunicação e Campanhas',
+    icon: Megaphone,
+    collections: ['communication_campaigns'],
+    displayNames: {
+      communication_campaigns: 'Campanhas de Comunicação',
+    },
+  },
+  {
+    id: 'protecao',
+    label: 'Proteção e Salvaguarda',
+    icon: Shield,
+    collections: ['safeguarding_events'],
+    displayNames: {
+      safeguarding_events: 'Eventos de Proteção',
+    },
+  },
+  {
+    id: 'clima',
+    label: 'Ações Climáticas',
+    icon: Sprout,
+    collections: ['climate_actions'],
+    displayNames: {
+      climate_actions: 'Ações de Adaptação Climática',
+    },
+  },
+  {
+    id: 'sync',
+    label: 'Sincronização Externa',
+    icon: Receipt,
+    collections: ['conexao_sync', 'monthly_screening'],
+    displayNames: {
+      conexao_sync: 'Sincronização Kobo (Conexao)',
+      monthly_screening: 'Rastreios Mensais (Kobo)',
+    },
   },
 ];
 
