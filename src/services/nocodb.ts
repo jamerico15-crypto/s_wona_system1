@@ -143,6 +143,11 @@ export async function fetchOlikanassaCollections(signal?: AbortSignal): Promise<
     'projetos', 'usuarios_projetos', 'goals', 'liderancas', 'screenings',
     'members', 'groups', 'Outcomes1', 'Project_Objectives', 'Outputs',
     'Indicator_Catalog', 'indicator_measurements', 'districts', 'villages', 'health_posts',
+    'health_workers', 'food_security_support', 'activity_attendance', 'group_activities',
+    'training_courses', 'health_training_attendees', 'livelihood_training_attendees',
+    'communication_campaigns', 'safeguarding_events', 'climate_actions',
+    'despesas', 'diario_de_bordo', 'tarefas', 'report_settings',
+    'pspark_casos_de_lepra', 'conexao_sync', 'monthly_screening',
   ]);
   return all.filter((c) => olikanassaNames.has(c.name));
 }

@@ -466,6 +466,7 @@ export default function App() {
         isOlikanassa={!tablePrefix}
         showTableBuilder={showTableBuilder}
         isSuperAdmin={role === 'super_admin'}
+        tablePrefix={tablePrefix}
         onBackToAdmin={handleBackToAdmin}
         mobileOpen={mobileSidebarOpen}
         onMobileClose={() => setMobileSidebarOpen(false)}

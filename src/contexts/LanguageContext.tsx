@@ -34,6 +34,8 @@ export type TranslationKey =
   | 'sidebar.projectTables'
   | 'sidebar.otherTables'
   | 'sidebar.noTableFound'
+  | 'sidebar.noProjectAssigned'
+  | 'sidebar.contactAdmin'
   | 'sidebar.logout'
   | 'sidebar.expandMenu'
   | 'sidebar.collapseMenu'
@@ -254,6 +256,8 @@ const pt: Translations = {
   'sidebar.projectTables': 'Tabelas do Projeto',
   'sidebar.otherTables': 'Outras Tabelas',
   'sidebar.noTableFound': 'Nenhuma tabela encontrada.',
+  'sidebar.noProjectAssigned': 'Nenhum projeto atribuído',
+  'sidebar.contactAdmin': 'Contacte o administrador para lhe atribuir um projeto no NocoBase.',
   'sidebar.logout': 'Terminar sessão',
   'sidebar.expandMenu': 'Expandir menu',
   'sidebar.collapseMenu': 'Colapsar menu',
@@ -473,6 +477,8 @@ const en: Translations = {
   'sidebar.projectTables': 'Project Tables',
   'sidebar.otherTables': 'Other Tables',
   'sidebar.noTableFound': 'No tables found.',
+  'sidebar.noProjectAssigned': 'No project assigned',
+  'sidebar.contactAdmin': 'Please contact the administrator to assign you a project in NocoBase.',
   'sidebar.logout': 'Sign out',
   'sidebar.expandMenu': 'Expand menu',
   'sidebar.collapseMenu': 'Collapse menu',

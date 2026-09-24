@@ -1,5 +1,5 @@
-import { useState, useEffect, type ReactNode } from 'react';
-import { Database, Search, Table2, LogOut, ShieldCheck, Eye, Pencil, ChevronDown, BarChart3, Settings, ArrowLeft, Crown, PanelLeftClose, PanelLeftOpen, X, FileSpreadsheet } from 'lucide-react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { Database, Search, Table2, LogOut, ShieldCheck, Eye, Pencil, ChevronDown, BarChart3, Settings, ArrowLeft, Crown, PanelLeftClose, PanelLeftOpen, X, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import type { NocoBaseCollection } from '@/types/nocodb';
 import type { AppRole } from '@/contexts/AuthContext';
 import type { Project } from '@/contexts/ProjectContext';
@@ -32,6 +32,7 @@ interface SidebarProps {
   isOlikanassa: boolean;
   showTableBuilder: boolean;
   isSuperAdmin: boolean;
+  tablePrefix: string;
   onBackToAdmin: () => void;
   mobileOpen: boolean;
   onMobileClose: () => void;
@@ -54,6 +55,7 @@ export default function Sidebar({
   isOlikanassa,
   showTableBuilder,
   isSuperAdmin,
+  tablePrefix,
   onBackToAdmin,
   mobileOpen,
   onMobileClose,
@@ -70,7 +72,21 @@ export default function Sidebar({
   const { collectionVisible } = useVisibility();
   const { t } = useLanguage();
 
-  const visibleCollections = (collections ?? []).filter((c) => collectionVisible(c.name));
+  // Dynamic prefix-based filtering:
+  // - super_admin / admin: see ALL collections (no prefix filter)
+  // - regular users: see only collections whose name starts with the project's table_prefix
+  // - if no table_prefix and not admin: show no operational tables (fallback warning)
+  const isAdminRole = user?.role === 'super_admin' || user?.role === 'admin';
+  const hasPrefix = !!tablePrefix;
+
+  const prefixFilteredCollections = useMemo(() => {
+    if (isAdminRole) return collections ?? [];
+    if (!hasPrefix) return [];
+    return (collections ?? []).filter((c) => c.name.startsWith(tablePrefix));
+  }, [collections, isAdminRole, hasPrefix, tablePrefix]);
+
+  const visibleCollections = prefixFilteredCollections.filter((c) => collectionVisible(c.name));
+  const showNoPrefixWarning = !isAdminRole && !hasPrefix;
 
   useEffect(() => {
     try {
@@ -94,6 +110,10 @@ export default function Sidebar({
   const collectionMap = new Map(visibleCollections.map((c) => [c.name, c]));
 
   const uncategorizedCollections = visibleCollections.filter((c) => !isCategorized(c.name));
+
+  // For admin users with no prefix, show categorized view using all collections.
+  // For regular users, only prefix-matched collections are in visibleCollections.
+  const useCategorizedView = isAdminRole || isOlikanassa;
 
   const filterBySearch = (list: NocoBaseCollection[]) =>
     list.filter((c) => collectionDisplayTitle(c).toLowerCase().includes(search.toLowerCase()));
@@ -219,6 +239,14 @@ export default function Sidebar({
               </div>
             ))}
           </div>
+        ) : showNoPrefixWarning ? (
+          <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+              <AlertCircle className="h-5 w-5 text-amber-600" />
+            </div>
+            <p className="text-sm font-medium text-slate-700">{t('sidebar.noProjectAssigned')}</p>
+            <p className="text-xs text-slate-400">{t('sidebar.contactAdmin')}</p>
+          </div>
         ) : collapsed ? (
           /* Collapsed: icon-only list */
           <div className="space-y-0.5">
@@ -233,7 +261,7 @@ export default function Sidebar({
           </div>
         ) : (
           <>
-            {isOlikanassa ? (
+            {useCategorizedView ? (
               CATEGORIES.map((category) => {
               const catCollections = filterBySearch(
                 category.collections
@@ -309,7 +337,7 @@ export default function Sidebar({
               ) : null
             )}
 
-            {isOlikanassa && uncategorizedCollections.length > 0 && (
+            {useCategorizedView && uncategorizedCollections.length > 0 && (
               <div className="mb-1">
                 <button
                   onClick={() => toggleCategory('other')}
