@@ -162,7 +162,7 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
           icon={<FolderKanban className="h-4 w-4" />}
           label={t('admin.tabProjects')}
         />
-        {canManage && (
+        {isSuperAdmin && (
           <TabButton
             active={activeTab === 'users'}
             onClick={() => setActiveTab('users')}
@@ -199,7 +199,7 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
           />
         )}
 
-        {activeTab === 'users' && canManage && (
+        {activeTab === 'users' && isSuperAdmin && (
           <UserProjectManager />
         )}
 

@@ -97,21 +97,28 @@ async function fetchProjectAssignments(user: NocoBaseUser, token?: string | null
     // fall through
   }
 
-  // Strategy 2: project_assignments table with server-side filter (userId, projectId)
+  // Strategy 2: query usuarios_projetos directly with appends, filter by user
   try {
-    const data = await fetchRecords('project_assignments', {
+    const filter = {
+      $or: [
+        { usuario_fkey: user.id },
+        { user_id: user.id },
+        { usuario_id: user.id },
+      ],
+    };
+    const data = await fetchRecords('usuarios_projetos', {
       page: 1,
       pageSize: 200,
-      filter: { userId: { $eq: user.id } },
-      appends: ['projeto'],
+      filter,
+      appends: ['projeto_id'],
     });
     const rows = data.data ?? [];
     if (rows.length > 0) {
       const projects: Project[] = [];
       const assignments: ProjectAssignment[] = [];
       for (const row of rows) {
-        const projRow = (row.projeto ?? row.project) as Record<string, unknown> | undefined;
-        const role = (row.role ?? row.role_no_projeto) as string | null;
+        const projRow = (row.projeto_id ?? row.projeto) as Record<string, unknown> | undefined;
+        const role = (row.role_no_projeto ?? row.role ?? row.tipo_role ?? row.role_projeto) as string | null;
         if (projRow && typeof projRow === 'object' && projRow.id != null) {
           const proj: Project = {
             id: projRow.id as string | number,
@@ -130,24 +137,24 @@ async function fetchProjectAssignments(user: NocoBaseUser, token?: string | null
     // fall through
   }
 
-  // Strategy 3: project_assignments without filter, match client-side
+  // Strategy 3: query usuarios_projetos without filter, match client-side
   try {
-    const data = await fetchRecords('project_assignments', {
+    const data = await fetchRecords('usuarios_projetos', {
       page: 1,
       pageSize: 500,
-      appends: ['projeto'],
+      appends: ['projeto_id'],
     });
     const userIdStr = String(user.id);
     const rows = (data.data ?? []).filter((row) => {
-      const uid = row.userId ?? row.user_id ?? row.usuario_id ?? row.usuario_fkey;
+      const uid = row.usuario_fkey ?? row.user_id ?? row.usuario_id;
       return uid != null && String(uid) === userIdStr;
     });
     if (rows.length > 0) {
       const projects: Project[] = [];
       const assignments: ProjectAssignment[] = [];
       for (const row of rows) {
-        const projRow = (row.projeto ?? row.project) as Record<string, unknown> | undefined;
-        const role = (row.role ?? row.role_no_projeto) as string | null;
+        const projRow = (row.projeto_id ?? row.projeto) as Record<string, unknown> | undefined;
+        const role = (row.role_no_projeto ?? row.role ?? row.tipo_role ?? row.role_projeto) as string | null;
         if (projRow && typeof projRow === 'object' && projRow.id != null) {
           const proj: Project = {
             id: projRow.id as string | number,
