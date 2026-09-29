@@ -1,15 +1,13 @@
 import { useEffect, useState, useCallback, type ReactNode, type FormEvent } from 'react';
 import {
-  FolderKanban, Plus, Users, ArrowRight, Loader2, AlertTriangle,
+  FolderKanban, Plus, ArrowRight, Loader2, AlertTriangle,
   RefreshCw, ShieldCheck, X, UserCircle, ChevronDown, Palette,
   Pencil, Trash2, BarChart3, CheckCircle2, Clock, PauseCircle, Activity,
-  Lock, Unlock, Settings as SettingsIcon, Link2, Eye,
+  Settings as SettingsIcon, Link2,
 } from 'lucide-react';
 import {
   fetchRecords, createRecord, updateRecord, deleteRecord,
-  fetchUsers, fetchRoles, setUserRole, fetchRolePermissions,
-  NocoDBError, type NocoBaseUser, type NocoBaseRole,
-  type NocoBaseRolePermission,
+  NocoDBError,
 } from '@/services/nocodb';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,16 +22,16 @@ import BrandingSettingsModal from '@/components/BrandingSettingsModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AccessMatrix from '@/components/AccessMatrix';
 import UserProjectManager from '@/components/UserProjectManager';
-import TableVisibilityManager from '@/components/TableVisibilityManager';
+
 
 interface MainAdminPageProps {
   onEnterProject: (project: Project) => void;
 }
 
-type AdminTab = 'projects' | 'users' | 'visibility' | 'settings';
+type AdminTab = 'projects' | 'users' | 'settings';
 
 export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
-  const { user, logout, role, token, assignedProjects } = useAuth();
+  const { user, logout, role, assignedProjects } = useAuth();
   const { setProjects } = useProject();
   const { notify } = useToast();
   const [allProjects, setAllProjects] = useState<Project[]>([]);
@@ -171,14 +169,7 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
             label="Utilizadores"
           />
         )}
-        {isSuperAdmin && (
-          <TabButton
-            active={activeTab === 'visibility'}
-            onClick={() => setActiveTab('visibility')}
-            icon={<Eye className="h-4 w-4" />}
-            label="Visibilidade"
-          />
-        )}
+
         <TabButton
           active={activeTab === 'settings'}
           onClick={() => setActiveTab('settings')}
@@ -212,14 +203,9 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
           <UserProjectManager />
         )}
 
-        {activeTab === 'visibility' && isSuperAdmin && (
-          <TableVisibilityManager />
-        )}
-
         {activeTab === 'settings' && (
           <SettingsTab
             onOpenBranding={() => setShowBrandingModal(true)}
-            token={token}
           />
         )}
       </div>
@@ -447,13 +433,10 @@ function ProjectsTab({
 
 function SettingsTab({
   onOpenBranding,
-  token,
 }: {
   onOpenBranding: () => void;
-  token: string | null;
 }) {
   const { t } = useLanguage();
-  const [showUserModal, setShowUserModal] = useState(false);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -463,20 +446,6 @@ function SettingsTab({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {/* Users card */}
-        <button
-          onClick={() => setShowUserModal(true)}
-          className="group flex items-start gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-slate-300 hover:shadow-lg"
-        >
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white" style={{ background: TLM_PRIMARY }}>
-            <Users className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-slate-800">{t('admin.usersTitle')}</h3>
-            <p className="mt-1 text-sm text-slate-500">{t('admin.usersDesc')}</p>
-          </div>
-        </button>
-
         {/* Branding card */}
         <button
           onClick={onOpenBranding}
@@ -491,10 +460,6 @@ function SettingsTab({
           </div>
         </button>
       </div>
-
-      {showUserModal && (
-        <ManageUsersModal onClose={() => setShowUserModal(false)} token={token} />
-      )}
     </div>
   );
 }
@@ -686,267 +651,6 @@ function ProjectForm({
         </button>
       </div>
     </form>
-  );
-}
-
-interface CrudAccess {
-  create: boolean;
-  read: boolean;
-  update: boolean;
-  delete: boolean;
-}
-
-function getCrudAccess(roleName: string): CrudAccess {
-  const r = roleName.trim().toLowerCase();
-  if (r === 'super_admin' || r === 'root' || r === 'admin') {
-    return { create: true, read: true, update: true, delete: true };
-  }
-  if (r.includes('admin') || r.includes('manager') || r.includes('cdpm') || r.includes('pso') || r.includes('country_leader')) {
-    return { create: true, read: true, update: true, delete: true };
-  }
-  if (r.includes('editor') || r.includes('merl') || r.includes('comms') || r.includes('officer') || r.includes('focal')) {
-    return { create: true, read: true, update: true, delete: false };
-  }
-  if (r.includes('leitor') || r.includes('viewer') || r.includes('member')) {
-    return { create: false, read: true, update: false, delete: false };
-  }
-  return { create: false, read: true, update: false, delete: false };
-}
-
-function ManageUsersModal({ onClose, token }: { onClose: () => void; token: string | null }) {
-  const { notify } = useToast();
-  const { t } = useLanguage();
-  const [users, setUsers] = useState<NocoBaseUser[]>([]);
-  const [roles, setRoles] = useState<NocoBaseRole[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState<string | number | null>(null);
-  const [selectedUserRole, setSelectedUserRole] = useState<string>('');
-  const [permissions, setPermissions] = useState<NocoBaseRolePermission | null>(null);
-  const [loadingPerms, setLoadingPerms] = useState(false);
-  const [confirmRoleChange, setConfirmRoleChange] = useState<{ userId: string | number; newRole: string } | null>(null);
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [u, r] = await Promise.all([fetchUsers(), fetchRoles()]);
-      setUsers(u);
-      setRoles(r);
-    } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar utilizadores.';
-      notify('error', msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [notify]);
-
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const loadPermissions = useCallback(async (roleName: string) => {
-    if (!roleName) {
-      setPermissions(null);
-      return;
-    }
-    setLoadingPerms(true);
-    try {
-      const perms = await fetchRolePermissions(roleName);
-      setPermissions(perms[0] ?? null);
-    } catch {
-      setPermissions(null);
-    } finally {
-      setLoadingPerms(false);
-    }
-  }, []);
-
-  const handleSelectUserRole = async (roleName: string) => {
-    setSelectedUserRole(roleName);
-    await loadPermissions(roleName);
-  };
-
-  const performRoleChange = async (userId: string | number, newRoleName: string) => {
-    setSavingId(userId);
-    try {
-      await setUserRole(userId, newRoleName, token);
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === userId
-            ? { ...u, roles: [{ name: newRoleName, title: roles.find((r) => r.name === newRoleName)?.title ?? null }] }
-            : u,
-        ),
-      );
-      notify('success', t('admin.roleUpdated'));
-    } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : t('admin.roleUpdateFailed');
-      notify('error', msg);
-    } finally {
-      setSavingId(null);
-    }
-  };
-
-  const handleChangeRole = (userId: string | number, newRoleName: string) => {
-    setConfirmRoleChange({ userId, newRole: newRoleName });
-  };
-
-  const confirmRoleUpdate = async () => {
-    if (!confirmRoleChange) return;
-    await performRoleChange(confirmRoleChange.userId, confirmRoleChange.newRole);
-    setConfirmRoleChange(null);
-  };
-
-  const roleLabel = (roleName: string): string => {
-    const r = roles.find((rl) => rl.name === roleName);
-    return r?.title || roleName;
-  };
-
-  const currentCrud = selectedUserRole ? getCrudAccess(selectedUserRole) : null;
-
-  return (
-    <ModalShell onClose={onClose} title={t('admin.usersTitle')} icon={<Users className="h-5 w-5" />} wide>
-      <div className="space-y-5">
-        <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
-          <p className="text-sm text-sky-800">{t('admin.usersDesc')}</p>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-            <span className="ml-2 text-sm text-slate-400">{t('admin.loadingRoles')}</span>
-          </div>
-        ) : users.length === 0 ? (
-          <p className="py-6 text-center text-sm text-slate-400">{t('sidebar.noTableFound')}</p>
-        ) : (
-          <>
-            {/* Users table */}
-            <div className="max-h-[40vh] space-y-2 overflow-y-auto">
-              {users.map((u) => {
-                const currentRole = u.roles[0]?.name ?? '';
-                const isSaving = savingId === u.id;
-                return (
-                  <div key={u.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3.5">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: TLM_PRIMARY }}>
-                      {(u.nickname || u.username || u.email).charAt(0).toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-700">{u.nickname || u.username || u.email}</p>
-                      <p className="truncate text-xs text-slate-400">{u.email}</p>
-                    </div>
-                    <div className="relative">
-                      {isSaving && (
-                        <Loader2 className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
-                      )}
-                      <select
-                        value={currentRole}
-                        onChange={(e) => {
-                          handleChangeRole(u.id, e.target.value);
-                          handleSelectUserRole(e.target.value);
-                        }}
-                        disabled={isSaving}
-                        className="appearance-none rounded-lg border border-slate-200 bg-slate-50 py-2 pl-3 pr-8 text-sm font-medium text-slate-700 transition focus:border-slate-400 focus:bg-white focus:outline-none disabled:opacity-50"
-                      >
-                        <option value="" disabled>...</option>
-                        {roles.map((r) => (
-                          <option key={r.name} value={r.name}>{r.title || r.name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    </div>
-                    {currentRole && (
-                      <span className="hidden rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500 sm:inline">
-                        {roleLabel(currentRole)}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* CRUD Matrix */}
-            {currentCrud && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4 text-slate-500" />
-                  <h4 className="text-sm font-bold text-slate-700">{t('admin.crudMatrix')}</h4>
-                  {selectedUserRole && (
-                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-600">
-                      {roleLabel(selectedUserRole)}
-                    </span>
-                  )}
-                </div>
-
-                {loadingPerms ? (
-                  <div className="flex items-center gap-2 py-3 text-sm text-slate-400">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {t('admin.loadingPermissions')}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-4 gap-2">
-                    <CrudBadge label={t('admin.crudCreate')} allowed={currentCrud.create} />
-                    <CrudBadge label={t('admin.crudRead')} allowed={currentCrud.read} />
-                    <CrudBadge label={t('admin.crudUpdate')} allowed={currentCrud.update} />
-                    <CrudBadge label={t('admin.crudDelete')} allowed={currentCrud.delete} />
-                  </div>
-                )}
-
-                {permissions && Object.keys(permissions.resources ?? {}).length > 0 && !loadingPerms && (
-                  <div className="mt-3 border-t border-slate-200 pt-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                      {t('admin.crudCollections')}
-                    </p>
-                    <div className="max-h-32 space-y-1 overflow-y-auto">
-                      {Object.entries(permissions.resources).slice(0, 20).map(([resource, perm]) => (
-                        <div key={resource} className="flex items-center justify-between rounded-md bg-white px-2.5 py-1.5 text-xs">
-                          <span className="truncate font-mono text-slate-600">{resource}</span>
-                          <div className="flex gap-1">
-                            {perm.actions.map((action) => (
-                              <span key={action} className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
-                                {action}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {!permissions && !loadingPerms && (
-                  <p className="mt-2 text-xs text-slate-400">{t('admin.noPermissions')}</p>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-      <ConfirmDialog
-        open={!!confirmRoleChange}
-        title={t('admin.role')}
-        message={confirmRoleChange ? t('admin.confirmRoleChange', { role: confirmRoleChange.newRole }) : ''}
-        confirmLabel={t('admin.save')}
-        cancelLabel={t('table.cancel')}
-        onConfirm={confirmRoleUpdate}
-        onCancel={() => setConfirmRoleChange(null)}
-        loading={savingId !== null}
-      />
-    </ModalShell>
-  );
-}
-
-function CrudBadge({ label, allowed }: { label: string; allowed: boolean }) {
-  return (
-    <div className={`flex flex-col items-center gap-1.5 rounded-lg border p-3 transition ${
-      allowed
-        ? 'border-emerald-200 bg-emerald-50'
-        : 'border-slate-200 bg-slate-100'
-    }`}>
-      {allowed ? (
-        <Unlock className="h-5 w-5 text-emerald-600" />
-      ) : (
-        <Lock className="h-5 w-5 text-slate-400" />
-      )}
-      <span className={`text-xs font-semibold ${allowed ? 'text-emerald-700' : 'text-slate-400'}`}>{label}</span>
-    </div>
   );
 }
 
