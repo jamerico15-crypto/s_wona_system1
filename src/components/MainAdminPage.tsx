@@ -420,7 +420,7 @@ function ProjectsTab({
             )}
           </div>
 
-            {canManage && (
+            {isSuperAdmin && (
               <div className="mt-8">
                 <AccessMatrix />
               </div>
