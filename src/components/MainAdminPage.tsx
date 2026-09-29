@@ -3,7 +3,7 @@ import {
   FolderKanban, Plus, Users, ArrowRight, Loader2, AlertTriangle,
   RefreshCw, ShieldCheck, X, UserCircle, ChevronDown, Palette,
   Pencil, Trash2, BarChart3, CheckCircle2, Clock, PauseCircle, Activity,
-  Lock, Unlock, Settings as SettingsIcon,
+  Lock, Unlock, Settings as SettingsIcon, Link2,
 } from 'lucide-react';
 import {
   fetchRecords, createRecord, updateRecord, deleteRecord,
@@ -23,12 +23,13 @@ import LanguageSelector from '@/components/LanguageSelector';
 import BrandingSettingsModal from '@/components/BrandingSettingsModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AccessMatrix from '@/components/AccessMatrix';
+import UserProjectManager from '@/components/UserProjectManager';
 
 interface MainAdminPageProps {
   onEnterProject: (project: Project) => void;
 }
 
-type AdminTab = 'projects' | 'settings';
+type AdminTab = 'projects' | 'users' | 'settings';
 
 export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const { user, logout, role, token, assignedProjects } = useAuth();
@@ -161,6 +162,14 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
           icon={<FolderKanban className="h-4 w-4" />}
           label={t('admin.tabProjects')}
         />
+        {canManage && (
+          <TabButton
+            active={activeTab === 'users'}
+            onClick={() => setActiveTab('users')}
+            icon={<Link2 className="h-4 w-4" />}
+            label="Utilizadores"
+          />
+        )}
         <TabButton
           active={activeTab === 'settings'}
           onClick={() => setActiveTab('settings')}
@@ -188,6 +197,10 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
             pausedProjects={pausedProjects}
             completedProjects={completedProjects}
           />
+        )}
+
+        {activeTab === 'users' && canManage && (
+          <UserProjectManager />
         )}
 
         {activeTab === 'settings' && (

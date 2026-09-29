@@ -836,4 +836,97 @@ export function canDelete(role: string | null): boolean {
   return r === 'super_admin' || r === 'admin_projeto' || r === 'admin';
 }
 
+// ─── usuarios_projetos management ──────────────────────────────────────────
+
+export interface UserProjectAssignment {
+  id: string | number;
+  userId: string | number;
+  userEmail: string;
+  userNickname: string | null;
+  projectId: string | number;
+  projectName: string;
+  role: string | null;
+}
+
+export interface ProjectInfo {
+  id: string | number;
+  nome: string;
+  status: string | null;
+  table_prefix: string | null;
+}
+
+export async function fetchAllProjects(signal?: AbortSignal): Promise<ProjectInfo[]> {
+  const data = await fetchRecords('projetos', { page: 1, pageSize: 200, signal });
+  return (data.data ?? []).map((r) => ({
+    id: r.id as string | number,
+    nome: r.nome as string,
+    status: (r.status as string | null) ?? null,
+    table_prefix: (r.table_prefix as string | null) ?? null,
+  }));
+}
+
+export async function fetchAllUserProjectAssignments(signal?: AbortSignal): Promise<UserProjectAssignment[]> {
+  try {
+    const data = await fetchRecords('usuarios_projetos', {
+      page: 1,
+      pageSize: 500,
+      appends: ['usuario_fkey', 'projeto_id'],
+      signal,
+    });
+    return (data.data ?? []).map((r) => {
+      const user = r.usuario_fkey as Record<string, unknown> | undefined;
+      const proj = r.projeto_id as Record<string, unknown> | undefined;
+      return {
+        id: r.id as string | number,
+        userId: (user?.id ?? r.user_id ?? r.usuario_id) as string | number,
+        userEmail: (user?.email as string) ?? '',
+        userNickname: (user?.nickname as string | null) ?? null,
+        projectId: (proj?.id ?? r.project_id ?? r.projeto_fkey) as string | number,
+        projectName: (proj?.nome as string) ?? 'Projeto',
+        role: (r.role_no_projeto ?? r.role ?? r.tipo_role ?? r.role_projeto) as string | null,
+      };
+    });
+  } catch {
+    // Fallback: fetch without appends
+    const data = await fetchRecords('usuarios_projetos', { page: 1, pageSize: 500, signal });
+    return (data.data ?? []).map((r) => ({
+      id: r.id as string | number,
+      userId: (r.usuario_fkey ?? r.user_id ?? r.usuario_id) as string | number,
+      userEmail: '',
+      userNickname: null,
+      projectId: (r.projeto_id ?? r.project_id ?? r.projeto_fkey) as string | number,
+      projectName: '',
+      role: (r.role_no_projeto ?? r.role ?? r.tipo_role ?? r.role_projeto) as string | null,
+    }));
+  }
+}
+
+export async function createUserProjectAssignment(
+  userId: string | number,
+  projectId: string | number,
+  role: string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  return createRecord('usuarios_projetos', {
+    usuario_fkey: userId,
+    projeto_id: projectId,
+    role_no_projeto: role,
+  }, signal);
+}
+
+export async function updateUserProjectAssignmentRole(
+  assignmentId: string | number,
+  role: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await updateRecord('usuarios_projetos', assignmentId, { role_no_projeto: role }, signal);
+}
+
+export async function deleteUserProjectAssignment(
+  assignmentId: string | number,
+  signal?: AbortSignal,
+): Promise<void> {
+  await deleteRecord('usuarios_projetos', assignmentId, signal);
+}
+
 
