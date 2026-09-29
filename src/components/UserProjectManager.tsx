@@ -6,35 +6,24 @@ import {
 import {
   fetchUsers, fetchAllProjects, fetchAllUserProjectAssignments,
   createUserProjectAssignment, updateUserProjectAssignmentRole,
-  deleteUserProjectAssignment,
-  NocoDBError, type NocoBaseUser,
+  deleteUserProjectAssignment, fetchRoles,
+  NocoDBError, type NocoBaseUser, type NocoBaseRole,
   type ProjectInfo, type UserProjectAssignment,
 } from '@/services/nocodb';
 import { useToast } from '@/components/Toast';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
-const PROJECT_ROLES = [
-  { value: 'manager', label: 'Gestor (Admin do Projeto)' },
-  { value: 'officer', label: 'Oficial (Editor)' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'merl', label: 'M&E / MERL' },
-  { value: 'focal', label: 'Ponto Focal' },
-  { value: 'field_worker', label: 'Trabalhador de Campo' },
-  { value: 'viewer', label: 'Leitor (Só consulta)' },
-  { value: 'member', label: 'Membro' },
-];
-
-function roleLabel(role: string | null): string {
+function roleLabel(role: string | null, roles: NocoBaseRole[]): string {
   if (!role) return 'Sem role';
-  const found = PROJECT_ROLES.find((r) => r.value === role.trim().toLowerCase());
-  return found ? found.label : role;
+  const found = roles.find((r) => r.name === role.trim());
+  return found ? (found.title || found.name) : role;
 }
 
 function roleBadgeClass(role: string | null): string {
   if (!role) return 'bg-slate-100 text-slate-500 ring-1 ring-slate-200';
   const r = role.trim().toLowerCase();
-  if (r === 'manager' || r.includes('admin')) return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+  if (r.includes('admin') || r === 'root' || r === 'super_admin') return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
   if (r.includes('editor') || r.includes('officer') || r.includes('merl') || r.includes('focal') || r.includes('field'))
     return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200';
   if (r.includes('viewer') || r.includes('leitor') || r.includes('member'))
@@ -55,19 +44,22 @@ export default function UserProjectManager() {
   const [editingAssignment, setEditingAssignment] = useState<UserProjectAssignment | null>(null);
   const [deletingAssignment, setDeletingAssignment] = useState<UserProjectAssignment | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [roles, setRoles] = useState<NocoBaseRole[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [u, p, a] = await Promise.all([
+      const [u, p, a, r] = await Promise.all([
         fetchUsers(),
         fetchAllProjects(),
         fetchAllUserProjectAssignments(),
+        fetchRoles(),
       ]);
       setUsers(u);
       setProjects(p);
       setAssignments(a);
+      setRoles(r);
     } catch (err) {
       const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar dados.';
       setError(msg);
@@ -312,11 +304,12 @@ export default function UserProjectManager() {
                           <div className="flex items-center gap-2">
                             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${roleBadgeClass(a.role)}`}>
                               <ShieldCheck className="h-3 w-3" />
-                              {roleLabel(a.role)}
+                              {roleLabel(a.role, roles)}
                             </span>
                             <div className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
                               <EditRoleButton
                                 assignment={a}
+                                roles={roles}
                                 onUpdated={(newRole) => {
                                   setEditingAssignment(null);
                                   loadData();
@@ -354,6 +347,7 @@ export default function UserProjectManager() {
         <AssignProjectModal
           user={selectedUser}
           availableProjects={availableProjects}
+          roles={roles}
           onClose={() => setShowAssignModal(false)}
           onAssigned={() => {
             setShowAssignModal(false);
@@ -377,10 +371,12 @@ export default function UserProjectManager() {
 
 function EditRoleButton({
   assignment,
+  roles,
   onUpdated,
   notify,
 }: {
   assignment: UserProjectAssignment;
+  roles: NocoBaseRole[];
   onUpdated: (newRole: string) => void;
   notify: (type: 'success' | 'error', msg: string) => void;
 }) {
@@ -391,7 +387,7 @@ function EditRoleButton({
     setSaving(true);
     try {
       await updateUserProjectAssignmentRole(assignment.id, newRole);
-      notify('success', `Role atualizado para "${roleLabel(newRole)}".`);
+      notify('success', `Role atualizado para "${roleLabel(newRole, roles)}".`);
       onUpdated(newRole);
     } catch (err) {
       const msg = err instanceof NocoDBError ? err.message : 'Falha ao atualizar role.';
@@ -416,14 +412,14 @@ function EditRoleButton({
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
             <p className="mb-1 px-2 py-1 text-xs font-semibold uppercase tracking-wider text-slate-400">Alterar Role</p>
-            {PROJECT_ROLES.map((r) => (
+            {roles.map((r) => (
               <button
-                key={r.value}
-                onClick={() => handleChange(r.value)}
+                key={r.name}
+                onClick={() => handleChange(r.name)}
                 className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50"
               >
-                {r.label}
-                {(assignment.role ?? '').toLowerCase() === r.value && <Check className="h-4 w-4 text-emerald-600" />}
+                {r.title || r.name}
+                {assignment.role === r.name && <Check className="h-4 w-4 text-emerald-600" />}
               </button>
             ))}
           </div>
@@ -436,17 +432,19 @@ function EditRoleButton({
 function AssignProjectModal({
   user,
   availableProjects,
+  roles,
   onClose,
   onAssigned,
 }: {
   user: NocoBaseUser;
   availableProjects: ProjectInfo[];
+  roles: NocoBaseRole[];
   onClose: () => void;
   onAssigned: () => void;
 }) {
   const { notify } = useToast();
   const [selectedProjectId, setSelectedProjectId] = useState<string | number>('');
-  const [selectedRole, setSelectedRole] = useState('viewer');
+  const [selectedRole, setSelectedRole] = useState(roles[0]?.name ?? '');
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -523,8 +521,8 @@ function AssignProjectModal({
                 onChange={(e) => setSelectedRole(e.target.value)}
                 className="w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 pr-9 text-sm text-slate-700 transition focus:border-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/5"
               >
-                {PROJECT_ROLES.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
+                {roles.map((r) => (
+                  <option key={r.name} value={r.name}>{r.title || r.name}</option>
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

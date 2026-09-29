@@ -3,7 +3,7 @@ import {
   FolderKanban, Plus, Users, ArrowRight, Loader2, AlertTriangle,
   RefreshCw, ShieldCheck, X, UserCircle, ChevronDown, Palette,
   Pencil, Trash2, BarChart3, CheckCircle2, Clock, PauseCircle, Activity,
-  Lock, Unlock, Settings as SettingsIcon, Link2,
+  Lock, Unlock, Settings as SettingsIcon, Link2, Eye,
 } from 'lucide-react';
 import {
   fetchRecords, createRecord, updateRecord, deleteRecord,
@@ -24,12 +24,13 @@ import BrandingSettingsModal from '@/components/BrandingSettingsModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AccessMatrix from '@/components/AccessMatrix';
 import UserProjectManager from '@/components/UserProjectManager';
+import TableVisibilityManager from '@/components/TableVisibilityManager';
 
 interface MainAdminPageProps {
   onEnterProject: (project: Project) => void;
 }
 
-type AdminTab = 'projects' | 'users' | 'settings';
+type AdminTab = 'projects' | 'users' | 'visibility' | 'settings';
 
 export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const { user, logout, role, token, assignedProjects } = useAuth();
@@ -170,6 +171,14 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
             label="Utilizadores"
           />
         )}
+        {isSuperAdmin && (
+          <TabButton
+            active={activeTab === 'visibility'}
+            onClick={() => setActiveTab('visibility')}
+            icon={<Eye className="h-4 w-4" />}
+            label="Visibilidade"
+          />
+        )}
         <TabButton
           active={activeTab === 'settings'}
           onClick={() => setActiveTab('settings')}
@@ -201,6 +210,10 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
 
         {activeTab === 'users' && isSuperAdmin && (
           <UserProjectManager />
+        )}
+
+        {activeTab === 'visibility' && isSuperAdmin && (
+          <TableVisibilityManager />
         )}
 
         {activeTab === 'settings' && (
