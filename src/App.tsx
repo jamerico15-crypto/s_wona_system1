@@ -20,10 +20,10 @@ import {
   fetchCollectionsForProject,
   fetchCollectionsByPrefix,
   fetchRecords,
+  fetchProjectTableVisibility,
   getConfigStatus,
   NocoDBError,
 } from '@/services/nocodb';
-import { fetchProjectTableVisibilitySupabase } from '@/services/projectVisibility';
 import type { NocoBaseCollection } from '@/types/nocodb';
 import { TLM_PRIMARY } from '@/config/theme';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -294,7 +294,7 @@ export default function App() {
       return;
     }
     let cancelled = false;
-    fetchProjectTableVisibilitySupabase(activeProject.id)
+    fetchProjectTableVisibility(activeProject.id)
       .then((rows) => {
         if (cancelled) return;
         const hidden = new Set<string>();
