@@ -294,11 +294,17 @@ export default function App() {
       return;
     }
     let cancelled = false;
-    fetchProjectTableVisibility(activeProject.id)
-      .then((rows) => {
+    Promise.all([
+      fetchProjectTableVisibility(activeProject.id, user?.id ?? null),
+      fetchProjectTableVisibility(activeProject.id, undefined, role),
+    ])
+      .then(([userRows, roleRows]) => {
         if (cancelled) return;
         const hidden = new Set<string>();
-        for (const row of rows) {
+        for (const row of userRows) {
+          if (!row.visible) hidden.add(row.collection_name);
+        }
+        for (const row of roleRows) {
           if (!row.visible) hidden.add(row.collection_name);
         }
         setProjectHiddenTables(hidden);
@@ -307,7 +313,7 @@ export default function App() {
         if (!cancelled) setProjectHiddenTables(new Set());
       });
     return () => { cancelled = true; };
-  }, [activeProject, role]);
+  }, [activeProject, role, user]);
 
   const visibleCollections = useMemo(
     () => collections.filter((c) => !projectHiddenTables.has(c.name)),

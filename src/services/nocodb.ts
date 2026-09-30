@@ -931,8 +931,12 @@ export async function deleteUserProjectAssignment(
 
 // ─── Project table visibility (stored in NocoBase) ────────────────────────
 
+export type VisibilityTarget = 'user' | 'role';
+
 export interface ProjectTableVisibilityRow {
   id?: string | number;
+  user_id: string | number | null;
+  role_name: string | null;
   project_id: string | number;
   collection_name: string;
   visible: boolean;
@@ -942,7 +946,17 @@ let ptvTableEnsured = false;
 
 async function recreatePtvTable(signal?: AbortSignal): Promise<void> {
   try { await deleteCollection('project_table_visibility', signal); } catch { /* may not exist */ }
-  await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Projeto', signal);
+  await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Utilizador', signal);
+  await createField('project_table_visibility', {
+    name: 'user_id',
+    interface: 'input',
+    type: 'string',
+  }, signal);
+  await createField('project_table_visibility', {
+    name: 'role_name',
+    interface: 'input',
+    type: 'string',
+  }, signal);
   await createField('project_table_visibility', {
     name: 'project_id',
     interface: 'input',
@@ -965,13 +979,44 @@ export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): P
   try {
     const fields = await fetchFields('project_table_visibility', signal);
     const projectIdField = fields.find((f) => f.name === 'project_id');
+    const userIdField = fields.find((f) => f.name === 'user_id');
+    const roleNameField = fields.find((f) => f.name === 'role_name');
     if (projectIdField && projectIdField.type === 'integer') {
       await recreatePtvTable(signal);
+    } else {
+      if (!userIdField) {
+        try {
+          await createField('project_table_visibility', {
+            name: 'user_id',
+            interface: 'input',
+            type: 'string',
+          }, signal);
+        } catch { /* field may already exist */ }
+      }
+      if (!roleNameField) {
+        try {
+          await createField('project_table_visibility', {
+            name: 'role_name',
+            interface: 'input',
+            type: 'string',
+          }, signal);
+        } catch { /* field may already exist */ }
+      }
     }
     ptvTableEnsured = true;
   } catch {
     try {
-      await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Projeto', signal);
+      await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Utilizador', signal);
+      await createField('project_table_visibility', {
+        name: 'user_id',
+        interface: 'input',
+        type: 'string',
+      }, signal);
+      await createField('project_table_visibility', {
+        name: 'role_name',
+        interface: 'input',
+        type: 'string',
+      }, signal);
       await createField('project_table_visibility', {
         name: 'project_id',
         interface: 'input',
@@ -996,19 +1041,26 @@ export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): P
 
 export async function fetchProjectTableVisibility(
   projectId: string | number,
+  userId?: string | number | null,
+  roleName?: string | null,
   signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
   if (!isConfigured()) return [];
   await ensureProjectTableVisibilityTable(signal);
   try {
+    const filter: Record<string, unknown> = { project_id: String(projectId) };
+    if (userId != null) filter.user_id = String(userId);
+    if (roleName != null && roleName !== '') filter.role_name = roleName;
     const data = await fetchRecords('project_table_visibility', {
       page: 1,
       pageSize: 500,
-      filter: { project_id: String(projectId) },
+      filter,
       signal,
     });
     return (data.data ?? []).map((r) => ({
       id: r.id as string | number,
+      user_id: (r.user_id as string | number | null) ?? null,
+      role_name: (r.role_name as string | null) ?? null,
       project_id: r.project_id as string | number,
       collection_name: r.collection_name as string,
       visible: r.visible as boolean,
@@ -1022,15 +1074,22 @@ export async function upsertProjectTableVisibility(
   projectId: string | number,
   collectionName: string,
   visible: boolean,
+  userId?: string | number | null,
+  roleName?: string | null,
   signal?: AbortSignal,
 ): Promise<void> {
   if (!isConfigured()) return;
   await ensureProjectTableVisibilityTable(signal);
   const pid = String(projectId);
+  const uid = userId != null ? String(userId) : null;
+  const rname = roleName ?? null;
+  const filter: Record<string, unknown> = { project_id: pid, collection_name: collectionName };
+  if (uid != null) filter.user_id = uid;
+  if (rname != null && rname !== '') filter.role_name = rname;
   const existing = await fetchRecords('project_table_visibility', {
     page: 1,
     pageSize: 1,
-    filter: { project_id: pid, collection_name: collectionName },
+    filter,
     signal,
   });
   const row = existing.data?.[0];
@@ -1039,6 +1098,8 @@ export async function upsertProjectTableVisibility(
     await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
   } else {
     await createRecord('project_table_visibility', {
+      user_id: uid,
+      role_name: rname,
       project_id: pid,
       collection_name: collectionName,
       visible,
@@ -1059,6 +1120,8 @@ export async function fetchAllProjectTableVisibility(
     });
     return (data.data ?? []).map((r) => ({
       id: r.id as string | number,
+      user_id: (r.user_id as string | number | null) ?? null,
+      role_name: (r.role_name as string | null) ?? null,
       project_id: r.project_id as string | number,
       collection_name: r.collection_name as string,
       visible: r.visible as boolean,
@@ -1068,5 +1131,115 @@ export async function fetchAllProjectTableVisibility(
   }
 }
 
+// ─── Project visibility per user (stored in NocoBase) ───────────────────
 
+export interface ProjectVisibilityRow {
+  id?: string | number;
+  user_id: string | number;
+  project_id: string | number;
+  visible: boolean;
+}
 
+let pvTableEnsured = false;
+
+export async function ensureProjectVisibilityTable(signal?: AbortSignal): Promise<void> {
+  if (!isConfigured() || pvTableEnsured) return;
+  try {
+    await fetchFields('project_visibility', signal);
+  } catch {
+    try {
+      await createCollection('project_visibility', 'Visibilidade de Projetos por Utilizador', signal);
+      await createField('project_visibility', {
+        name: 'user_id',
+        interface: 'input',
+        type: 'string',
+      }, signal);
+      await createField('project_visibility', {
+        name: 'project_id',
+        interface: 'input',
+        type: 'string',
+      }, signal);
+      await createField('project_visibility', {
+        name: 'visible',
+        interface: 'switch',
+        type: 'boolean',
+      }, signal);
+    } catch { /* ignore */ }
+  }
+  pvTableEnsured = true;
+}
+
+export async function fetchProjectVisibilityForUser(
+  userId: string | number,
+  signal?: AbortSignal,
+): Promise<ProjectVisibilityRow[]> {
+  if (!isConfigured()) return [];
+  await ensureProjectVisibilityTable(signal);
+  try {
+    const data = await fetchRecords('project_visibility', {
+      page: 1,
+      pageSize: 500,
+      filter: { user_id: String(userId) },
+      signal,
+    });
+    return (data.data ?? []).map((r) => ({
+      id: r.id as string | number,
+      user_id: r.user_id as string | number,
+      project_id: r.project_id as string | number,
+      visible: r.visible as boolean,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchAllProjectVisibility(
+  signal?: AbortSignal,
+): Promise<ProjectVisibilityRow[]> {
+  if (!isConfigured()) return [];
+  await ensureProjectVisibilityTable(signal);
+  try {
+    const data = await fetchRecords('project_visibility', {
+      page: 1,
+      pageSize: 1000,
+      signal,
+    });
+    return (data.data ?? []).map((r) => ({
+      id: r.id as string | number,
+      user_id: r.user_id as string | number,
+      project_id: r.project_id as string | number,
+      visible: r.visible as boolean,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertProjectVisibility(
+  userId: string | number,
+  projectId: string | number,
+  visible: boolean,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isConfigured()) return;
+  await ensureProjectVisibilityTable(signal);
+  const uid = String(userId);
+  const pid = String(projectId);
+  const existing = await fetchRecords('project_visibility', {
+    page: 1,
+    pageSize: 1,
+    filter: { user_id: uid, project_id: pid },
+    signal,
+  });
+  const row = existing.data?.[0];
+  if (row) {
+    const updateUrl = `${cleanUrl()}/api/project_visibility:update?filterByTk=${encodeURIComponent(String(row.id))}`;
+    await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
+  } else {
+    await createRecord('project_visibility', {
+      user_id: uid,
+      project_id: pid,
+      visible,
+    }, signal);
+  }
+}

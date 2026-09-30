@@ -23,13 +23,14 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import AccessMatrix from '@/components/AccessMatrix';
 import UserProjectManager from '@/components/UserProjectManager';
 import ProjectTableVisibility from '@/components/ProjectTableVisibility';
+import ProjectVisibility from '@/components/ProjectVisibility';
 
 
 interface MainAdminPageProps {
   onEnterProject: (project: Project) => void;
 }
 
-type AdminTab = 'projects' | 'users' | 'tables' | 'settings';
+type AdminTab = 'projects' | 'users' | 'tables' | 'projectVisibility' | 'settings';
 
 export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const { user, logout, role, assignedProjects } = useAuth();
@@ -178,6 +179,14 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
             label="Tabelas por Projeto"
           />
         )}
+        {isSuperAdmin && (
+          <TabButton
+            active={activeTab === 'projectVisibility'}
+            onClick={() => setActiveTab('projectVisibility')}
+            icon={<FolderKanban className="h-4 w-4" />}
+            label="Projetos por Utilizador"
+          />
+        )}
 
         <TabButton
           active={activeTab === 'settings'}
@@ -214,6 +223,10 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
 
         {activeTab === 'tables' && isSuperAdmin && (
           <ProjectTableVisibility />
+        )}
+
+        {activeTab === 'projectVisibility' && isSuperAdmin && (
+          <ProjectVisibility />
         )}
 
         {activeTab === 'settings' && (
