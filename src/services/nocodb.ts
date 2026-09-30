@@ -788,6 +788,167 @@ export async function upsertVisibilitySetting(
 
 export { isConfigured, getConfigStatus };
 
+// ─── Table permissions (stored in NocoBase) ──────────────────────────────
+
+export type TablePermission = 'view' | 'create' | 'edit' | 'delete';
+
+export const ALL_PERMISSIONS: TablePermission[] = ['view', 'create', 'edit', 'delete'];
+
+export interface TablePermissionRow {
+  id?: string | number;
+  role_name: string;
+  collection_name: string;
+  can_view: boolean;
+  can_create: boolean;
+  can_edit: boolean;
+  can_delete: boolean;
+}
+
+let tpTableEnsured = false;
+
+export async function ensureTablePermissionsTable(signal?: AbortSignal): Promise<void> {
+  if (!isConfigured() || tpTableEnsured) return;
+  try {
+    await fetchFields('table_permissions', signal);
+  } catch {
+    try {
+      await createCollection('table_permissions', 'Permissoes por Tabela e Cargo', signal);
+    } catch { /* may already exist */ }
+  }
+  const fields = await fetchFields('table_permissions', signal).catch(() => []);
+  const ensureField = async (name: string, iface: string, type: string) => {
+    if (!fields.find((f) => f.name === name)) {
+      try {
+        await createField('table_permissions', { name, interface: iface, type }, signal);
+      } catch { /* may already exist */ }
+    }
+  };
+  await ensureField('role_name', 'input', 'string');
+  await ensureField('collection_name', 'input', 'string');
+  await ensureField('can_view', 'switch', 'boolean');
+  await ensureField('can_create', 'switch', 'boolean');
+  await ensureField('can_edit', 'switch', 'boolean');
+  await ensureField('can_delete', 'switch', 'boolean');
+  tpTableEnsured = true;
+}
+
+export async function fetchTablePermissions(
+  roleName?: string | null,
+  signal?: AbortSignal,
+): Promise<TablePermissionRow[]> {
+  if (!isConfigured()) return [];
+  await ensureTablePermissionsTable(signal);
+  try {
+    const filter: Record<string, unknown> = {};
+    if (roleName) filter.role_name = roleName;
+    const data = await fetchRecords('table_permissions', {
+      page: 1,
+      pageSize: 500,
+      filter: Object.keys(filter).length > 0 ? filter : undefined,
+      signal,
+    });
+    return (data.data ?? []).map((r) => ({
+      id: r.id as string | number,
+      role_name: r.role_name as string,
+      collection_name: r.collection_name as string,
+      can_view: r.can_view as boolean,
+      can_create: r.can_create as boolean,
+      can_edit: r.can_edit as boolean,
+      can_delete: r.can_delete as boolean,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertTablePermission(
+  roleName: string,
+  collectionName: string,
+  permission: TablePermission,
+  value: boolean,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isConfigured()) return;
+  await ensureTablePermissionsTable(signal);
+  const filter = { role_name: roleName, collection_name: collectionName };
+  const existing = await fetchRecords('table_permissions', {
+    page: 1,
+    pageSize: 1,
+    filter,
+    signal,
+  });
+  const row = existing.data?.[0];
+  const fieldMap: Record<TablePermission, string> = {
+    view: 'can_view',
+    create: 'can_create',
+    edit: 'can_edit',
+    delete: 'can_delete',
+  };
+  const col = fieldMap[permission];
+  if (row) {
+    const updateUrl = `${cleanUrl()}/api/table_permissions:update?filterByTk=${encodeURIComponent(String(row.id))}`;
+    await request(updateUrl, { method: 'PATCH', body: { [col]: value }, signal });
+  } else {
+    const base: Record<string, unknown> = {
+      role_name: roleName,
+      collection_name: collectionName,
+      can_view: false,
+      can_create: false,
+      can_edit: false,
+      can_delete: false,
+    };
+    base[col] = value;
+    await createRecord('table_permissions', base, signal);
+  }
+}
+
+export async function deleteTablePermission(
+  roleName: string,
+  collectionName: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isConfigured()) return;
+  await ensureTablePermissionsTable(signal);
+  const filter = { role_name: roleName, collection_name: collectionName };
+  const existing = await fetchRecords('table_permissions', {
+    page: 1,
+    pageSize: 1,
+    filter,
+    signal,
+  });
+  const row = existing.data?.[0];
+  if (row) {
+    await deleteRecord('table_permissions', row.id, signal);
+  }
+}
+
+export async function fetchPermissionsForRole(
+  roleName: string,
+  collectionName: string,
+  signal?: AbortSignal,
+): Promise<TablePermissionRow | null> {
+  if (!isConfigured()) return null;
+  await ensureTablePermissionsTable(signal);
+  const filter = { role_name: roleName, collection_name: collectionName };
+  const data = await fetchRecords('table_permissions', {
+    page: 1,
+    pageSize: 1,
+    filter,
+    signal,
+  });
+  const row = data.data?.[0];
+  if (!row) return null;
+  return {
+    id: row.id as string | number,
+    role_name: row.role_name as string,
+    collection_name: row.collection_name as string,
+    can_view: row.can_view as boolean,
+    can_create: row.can_create as boolean,
+    can_edit: row.can_edit as boolean,
+    can_delete: row.can_delete as boolean,
+  };
+}
+
 // ─── Per-project credential loading & access validation ──────────────────
 
 export interface ProjectCredentials {

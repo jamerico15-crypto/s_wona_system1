@@ -5,8 +5,9 @@ import Pagination from '@/components/Pagination';
 import RecordFormModal from '@/components/RecordFormModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
-import { fetchFields, fetchRecords, createRecord, updateRecord, deleteRecord, NocoDBError } from '@/services/nocodb';
+import { fetchFields, fetchRecords, createRecord, updateRecord, deleteRecord, fetchPermissionsForRole, NocoDBError } from '@/services/nocodb';
 import type { NocoBaseField, NocoBaseCollection } from '@/types/nocodb';
+import type { TablePermissionRow } from '@/services/nocodb';
 import { useAuth } from '@/hooks/useAuth';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -37,6 +38,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
   const [editingRecord, setEditingRecord] = useState<Record<string, unknown> | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Record<string, unknown> | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [permOverride, setPermOverride] = useState<TablePermissionRow | null>(null);
 
   const title = useMemo(() => displayTitle(collection), [collection]);
 
@@ -89,9 +91,16 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
     setTotalRows(0);
     setPage(1);
     setError(null);
+    setPermOverride(null);
     loadFields(controller.signal);
+    const effectiveRole = projectRole || role;
+    if (effectiveRole && effectiveRole !== 'super_admin') {
+      fetchPermissionsForRole(effectiveRole, collection.name, controller.signal)
+        .then((p) => { if (!controller.signal.aborted) setPermOverride(p); })
+        .catch(() => {});
+    }
     return () => controller.abort();
-  }, [collection.name, loadFields]);
+  }, [collection.name, loadFields, projectRole, role]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -163,9 +172,22 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
     loadData();
   };
 
-  const canCreate = (role !== 'leitor' && projectRole !== 'leitor' && projectRole !== 'none') && !collection.unavailableActions?.includes('create');
-  const canEdit = (role !== 'leitor' && projectRole !== 'leitor' && projectRole !== 'none') && !collection.unavailableActions?.includes('update');
-  const canDelete = (role === 'admin' || role === 'super_admin' || projectRole === 'admin_projeto' || projectRole === 'super_admin') && !collection.unavailableActions?.includes('destroy');
+  const isSuperAdmin = role === 'super_admin';
+  const effectiveRole = projectRole || role;
+
+  // If a permission override exists for this role+collection, use it.
+  // Otherwise fall back to the default role-based logic.
+  const hasOverride = permOverride !== null;
+  const canCreate = isSuperAdmin || (hasOverride
+    ? permOverride!.can_create
+    : (role !== 'leitor' && projectRole !== 'leitor' && projectRole !== 'none')) && !collection.unavailableActions?.includes('create');
+  const canEdit = isSuperAdmin || (hasOverride
+    ? permOverride!.can_edit
+    : (role !== 'leitor' && projectRole !== 'leitor' && projectRole !== 'none')) && !collection.unavailableActions?.includes('update');
+  const canDelete = isSuperAdmin || (hasOverride
+    ? permOverride!.can_delete
+    : (role === 'admin' || projectRole === 'admin_projeto')) && !collection.unavailableActions?.includes('destroy');
+  const canView = isSuperAdmin || (hasOverride ? permOverride!.can_view : true);
 
   return (
     <div className="flex h-full flex-col">
@@ -253,7 +275,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
         fields={visibleFields}
         initialValues={editingRecord ?? undefined}
         collectionTitle={title}
-        readOnly={projectRole === 'leitor' || role === 'leitor'}
+        readOnly={!canEdit && !canCreate}
         onSubmit={handleFormSubmit}
         onClose={() => {
           setFormOpen(false);

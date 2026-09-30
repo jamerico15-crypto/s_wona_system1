@@ -3,7 +3,7 @@ import {
   FolderKanban, Plus, ArrowRight, Loader2, AlertTriangle,
   RefreshCw, ShieldCheck, X, UserCircle, ChevronDown, Palette,
   Pencil, Trash2, BarChart3, CheckCircle2, Clock, PauseCircle, Activity,
-  Settings as SettingsIcon, Link2, Table2, Eye,
+  Settings as SettingsIcon, Link2, Table2, Eye, ShieldCheck as ShieldIcon,
 } from 'lucide-react';
 import {
   fetchRecords, createRecord, updateRecord, deleteRecord,
@@ -25,6 +25,7 @@ import UserProjectManager from '@/components/UserProjectManager';
 import ProjectTableVisibility from '@/components/ProjectTableVisibility';
 import ProjectVisibility from '@/components/ProjectVisibility';
 import VisibilityPanel from '@/components/VisibilityPanel';
+import PermissionPanel from '@/components/PermissionPanel';
 import { fetchCollections } from '@/services/nocodb';
 import type { NocoBaseCollection } from '@/types/nocodb';
 
@@ -33,7 +34,7 @@ interface MainAdminPageProps {
   onEnterProject: (project: Project) => void;
 }
 
-type AdminTab = 'projects' | 'users' | 'tables' | 'projectVisibility' | 'visibility' | 'settings';
+type AdminTab = 'projects' | 'users' | 'tables' | 'projectVisibility' | 'visibility' | 'permissions' | 'settings';
 
 export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const { user, logout, role, assignedProjects } = useAuth();
@@ -218,6 +219,15 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
 
         {isSuperAdmin && (
           <TabButton
+            active={activeTab === 'permissions'}
+            onClick={() => setActiveTab('permissions')}
+            icon={<ShieldIcon className="h-4 w-4" />}
+            label="Permissoes"
+          />
+        )}
+
+        {isSuperAdmin && (
+          <TabButton
             active={activeTab === 'settings'}
             onClick={() => setActiveTab('settings')}
             icon={<SettingsIcon className="h-4 w-4" />}
@@ -262,6 +272,12 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
         {activeTab === 'visibility' && isSuperAdmin && (
           <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden" style={{ height: 'calc(100vh - 220px)' }}>
             <VisibilityPanel collections={allCollections} />
+          </div>
+        )}
+
+        {activeTab === 'permissions' && isSuperAdmin && (
+          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden" style={{ height: 'calc(100vh - 220px)' }}>
+            <PermissionPanel collections={allCollections} />
           </div>
         )}
 
