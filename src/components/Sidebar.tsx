@@ -88,12 +88,14 @@ export default function Sidebar({
 
   const prefixFilteredCollections = useMemo(() => {
     if (isAdminRole) return collections ?? [];
+    // Olikanassa (main project) has no prefix — show all collections
+    if (isOlikanassa) return collections ?? [];
     if (!hasPrefix) return [];
     return (collections ?? []).filter((c) => c.name.startsWith(tablePrefix));
-  }, [collections, isAdminRole, hasPrefix, tablePrefix]);
+  }, [collections, isAdminRole, hasPrefix, tablePrefix, isOlikanassa]);
 
   const visibleCollections = prefixFilteredCollections.filter((c) => collectionVisible(c.name));
-  const showNoPrefixWarning = !isAdminRole && !hasPrefix;
+  const showNoPrefixWarning = !isAdminRole && !hasPrefix && !isOlikanassa;
 
   useEffect(() => {
     try {
