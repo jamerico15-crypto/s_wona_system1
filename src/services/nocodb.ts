@@ -5,6 +5,7 @@ import type {
   NocoBaseRecordList,
 } from '@/types/nocodb';
 import { isGlobalTable } from '@/config/projectConfig';
+import { supabase } from '@/services/supabase';
 
 const NOCOBASE_URL = import.meta.env.VITE_NOCODB_URL as string | undefined;
 const NOCOBASE_TOKEN = import.meta.env.VITE_NOCODB_TOKEN as string | undefined;
@@ -804,66 +805,24 @@ export interface TablePermissionRow {
   can_delete: boolean;
 }
 
-let tpTableEnsured = false;
-
-export async function ensureTablePermissionsTable(signal?: AbortSignal): Promise<void> {
-  if (!isConfigured() || tpTableEnsured) return;
-
-  // Step 1: Check if the collection exists by listing its fields
-  let fields = await fetchFields('table_permissions', signal).catch(() => null);
-
-  // Step 2: If not, create the collection
-  if (!fields) {
-    await createCollection('table_permissions', 'Permissoes por Tabela e Cargo', signal).catch(() => {});
-    // Wait a moment for NocoBase to register the collection, then re-fetch
-    fields = await fetchFields('table_permissions', signal).catch(() => [] as NocoBaseField[]);
-  }
-
-  if (!fields) fields = [];
-
-  // Step 3: Ensure all required fields exist
-  const ensureField = async (name: string, iface: string, type: string) => {
-    if (!fields!.find((f) => f.name === name)) {
-      await createField('table_permissions', { name, interface: iface, type }, signal).catch(() => {});
-    }
-  };
-  await ensureField('role_name', 'input', 'string');
-  await ensureField('collection_name', 'input', 'string');
-  await ensureField('can_view', 'checkbox', 'boolean');
-  await ensureField('can_create', 'checkbox', 'boolean');
-  await ensureField('can_edit', 'checkbox', 'boolean');
-  await ensureField('can_delete', 'checkbox', 'boolean');
-
-  tpTableEnsured = true;
-}
+// ─── Table permissions (stored in Supabase) ──────────────────────────────
 
 export async function fetchTablePermissions(
   roleName?: string | null,
-  signal?: AbortSignal,
 ): Promise<TablePermissionRow[]> {
-  if (!isConfigured()) return [];
-  await ensureTablePermissionsTable(signal);
-  try {
-    const filter: Record<string, unknown> = {};
-    if (roleName) filter.role_name = roleName;
-    const data = await fetchRecords('table_permissions', {
-      page: 1,
-      pageSize: 500,
-      filter: Object.keys(filter).length > 0 ? filter : undefined,
-      signal,
-    });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
-      role_name: r.role_name as string,
-      collection_name: r.collection_name as string,
-      can_view: r.can_view as boolean,
-      can_create: r.can_create as boolean,
-      can_edit: r.can_edit as boolean,
-      can_delete: r.can_delete as boolean,
-    }));
-  } catch {
-    return [];
-  }
+  let query = supabase.from('table_permissions').select('*');
+  if (roleName) query = query.eq('role_name', roleName);
+  const { data, error } = await query;
+  if (error) throw new NocoDBError(`Erro ao ler permissoes: ${error.message}`, 0);
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    role_name: r.role_name,
+    collection_name: r.collection_name,
+    can_view: r.can_view,
+    can_create: r.can_create,
+    can_edit: r.can_edit,
+    can_delete: r.can_delete,
+  }));
 }
 
 export async function upsertTablePermission(
@@ -871,20 +830,7 @@ export async function upsertTablePermission(
   collectionName: string,
   permission: TablePermission,
   value: boolean,
-  signal?: AbortSignal,
 ): Promise<void> {
-  if (!isConfigured()) return;
-  // Reset the ensured flag so we retry table creation if it failed before
-  tpTableEnsured = false;
-  await ensureTablePermissionsTable(signal);
-  const filter = { role_name: roleName, collection_name: collectionName };
-  const existing = await fetchRecords('table_permissions', {
-    page: 1,
-    pageSize: 1,
-    filter,
-    signal,
-  });
-  const row = existing.data?.[0];
   const fieldMap: Record<TablePermission, string> = {
     view: 'can_view',
     create: 'can_create',
@@ -892,11 +838,24 @@ export async function upsertTablePermission(
     delete: 'can_delete',
   };
   const col = fieldMap[permission];
-  if (row) {
-    const updateUrl = `${cleanUrl()}/api/table_permissions:update?filterByTk=${encodeURIComponent(String(row.id))}`;
-    await request(updateUrl, { method: 'PATCH', body: { [col]: value }, signal });
+
+  const { data: existing, error: fetchErr } = await supabase
+    .from('table_permissions')
+    .select('id')
+    .eq('role_name', roleName)
+    .eq('collection_name', collectionName)
+    .maybeSingle();
+
+  if (fetchErr) throw new NocoDBError(`Erro ao procurar permissao: ${fetchErr.message}`, 0);
+
+  if (existing) {
+    const { error: updateErr } = await supabase
+      .from('table_permissions')
+      .update({ [col]: value, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+    if (updateErr) throw new NocoDBError(`Erro ao atualizar permissao: ${updateErr.message}`, 0);
   } else {
-    const base: Record<string, unknown> = {
+    const row: Record<string, unknown> = {
       role_name: roleName,
       collection_name: collectionName,
       can_view: false,
@@ -904,55 +863,46 @@ export async function upsertTablePermission(
       can_edit: false,
       can_delete: false,
     };
-    base[col] = value;
-    await createRecord('table_permissions', base, signal);
+    row[col] = value;
+    const { error: insertErr } = await supabase
+      .from('table_permissions')
+      .insert(row);
+    if (insertErr) throw new NocoDBError(`Erro ao criar permissao: ${insertErr.message}`, 0);
   }
 }
 
 export async function deleteTablePermission(
   roleName: string,
   collectionName: string,
-  signal?: AbortSignal,
 ): Promise<void> {
-  if (!isConfigured()) return;
-  await ensureTablePermissionsTable(signal);
-  const filter = { role_name: roleName, collection_name: collectionName };
-  const existing = await fetchRecords('table_permissions', {
-    page: 1,
-    pageSize: 1,
-    filter,
-    signal,
-  });
-  const row = existing.data?.[0];
-  if (row) {
-    await deleteRecord('table_permissions', row.id, signal);
-  }
+  const { error } = await supabase
+    .from('table_permissions')
+    .delete()
+    .eq('role_name', roleName)
+    .eq('collection_name', collectionName);
+  if (error) throw new NocoDBError(`Erro ao remover permissao: ${error.message}`, 0);
 }
 
 export async function fetchPermissionsForRole(
   roleName: string,
   collectionName: string,
-  signal?: AbortSignal,
 ): Promise<TablePermissionRow | null> {
-  if (!isConfigured()) return null;
-  await ensureTablePermissionsTable(signal);
-  const filter = { role_name: roleName, collection_name: collectionName };
-  const data = await fetchRecords('table_permissions', {
-    page: 1,
-    pageSize: 1,
-    filter,
-    signal,
-  });
-  const row = data.data?.[0];
-  if (!row) return null;
+  const { data, error } = await supabase
+    .from('table_permissions')
+    .select('*')
+    .eq('role_name', roleName)
+    .eq('collection_name', collectionName)
+    .maybeSingle();
+  if (error) throw new NocoDBError(`Erro ao ler permissao: ${error.message}`, 0);
+  if (!data) return null;
   return {
-    id: row.id as string | number,
-    role_name: row.role_name as string,
-    collection_name: row.collection_name as string,
-    can_view: row.can_view as boolean,
-    can_create: row.can_create as boolean,
-    can_edit: row.can_edit as boolean,
-    can_delete: row.can_delete as boolean,
+    id: data.id,
+    role_name: data.role_name,
+    collection_name: data.collection_name,
+    can_view: data.can_view,
+    can_create: data.can_create,
+    can_edit: data.can_edit,
+    can_delete: data.can_delete,
   };
 }
 

@@ -98,7 +98,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
     if (realRoleNames.length > 0 && !realRoleNames.includes('super_admin')) {
       Promise.all(
         realRoleNames.map((rn) =>
-          fetchPermissionsForRole(rn, collection.name, controller.signal).catch(() => null),
+          fetchPermissionsForRole(rn, collection.name).catch(() => null),
         ),
       ).then((results) => {
         if (controller.signal.aborted) return;
