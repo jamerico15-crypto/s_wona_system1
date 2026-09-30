@@ -5,6 +5,7 @@ import type { VisibilityContextValue } from '@/contexts/VisibilityContext';
 const noop = () => {};
 const noopBool = () => true;
 const noopStr = () => {};
+const noopArr = () => {};
 
 const safeFallback: VisibilityContextValue = {
   collectionVisible: noopBool,
@@ -19,6 +20,8 @@ const safeFallback: VisibilityContextValue = {
   loading: false,
   activeRole: null,
   setActiveRole: noopStr,
+  activeRoles: [],
+  setActiveRoles: noopArr,
 };
 
 export function useVisibility(): VisibilityContextValue {

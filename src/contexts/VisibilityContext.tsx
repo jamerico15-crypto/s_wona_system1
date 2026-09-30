@@ -27,6 +27,8 @@ export interface VisibilityContextValue {
   loading: boolean;
   activeRole: string | null;
   setActiveRole: (role: string | null) => void;
+  activeRoles: string[];
+  setActiveRoles: (roles: string[]) => void;
 }
 
 export const VisibilityContext = createContext<VisibilityContextValue | null>(null);
@@ -62,21 +64,39 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
   const [density, setDensityState] = useState<Density>(loadDensity);
   const [loading, setLoading] = useState(true);
   const [activeRole, setActiveRoleState] = useState<string | null>(null);
+  const [activeRoles, setActiveRolesState] = useState<string[]>([]);
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // Load visibility settings for all active roles (merge: if any role hides
+  // a collection/field, it stays hidden; if any shows it, it's visible unless
+  // another explicitly hides it).
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     async function load() {
-      const rows = await fetchVisibilitySettings(activeRole);
+      const rolesToFetch = activeRoles.length > 0 ? activeRoles : (activeRole ? [activeRole] : []);
+      if (rolesToFetch.length === 0) {
+        // No roles — fetch global settings (role = null)
+        const rows = await fetchVisibilitySettings(null);
+        if (cancelled) return;
+        setState(parseRows(rows));
+        setLoading(false);
+        return;
+      }
+      // Fetch for each role in parallel, plus global (null) settings
+      const fetches = [
+        fetchVisibilitySettings(null),
+        ...rolesToFetch.map((r) => fetchVisibilitySettings(r)),
+      ];
+      const allRows = (await Promise.all(fetches)).flat();
       if (cancelled) return;
-      setState(parseRows(rows));
+      setState(parseRows(allRows));
       setLoading(false);
     }
     load();
     return () => { cancelled = true; };
-  }, [activeRole]);
+  }, [activeRole, activeRoles]);
 
   useEffect(() => {
     try {
@@ -97,6 +117,7 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
     [state.fields],
   );
 
+  // Writes always use the single activeRole (the one selected in the admin panel)
   const setCollectionVisible = useCallback((name: string, visible: boolean) => {
     setState((prev) => ({
       ...prev,
@@ -152,6 +173,10 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
     setActiveRoleState(role);
   }, []);
 
+  const setActiveRoles = useCallback((roles: string[]) => {
+    setActiveRolesState(roles);
+  }, []);
+
   const hiddenFieldCount = useCallback(
     (collectionName: string) => {
       const colFields = state.fields[collectionName];
@@ -176,6 +201,8 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
         loading,
         activeRole,
         setActiveRole,
+        activeRoles,
+        setActiveRoles,
       }}
     >
       {children}

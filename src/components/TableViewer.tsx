@@ -20,7 +20,7 @@ interface CollectionViewerProps {
 
 export default function CollectionViewer({ collection }: CollectionViewerProps) {
   const { notify } = useToast();
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const { projectRole } = useProject();
   const { fieldVisible } = useVisibility();
   const { t } = useLanguage();
@@ -38,7 +38,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
   const [editingRecord, setEditingRecord] = useState<Record<string, unknown> | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Record<string, unknown> | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [permOverride, setPermOverride] = useState<TablePermissionRow | null>(null);
+  const [permOverrides, setPermOverrides] = useState<TablePermissionRow[]>([]);
 
   const title = useMemo(() => displayTitle(collection), [collection]);
 
@@ -91,16 +91,22 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
     setTotalRows(0);
     setPage(1);
     setError(null);
-    setPermOverride(null);
+    setPermOverrides([]);
     loadFields(controller.signal);
-    const effectiveRole = projectRole || role;
-    if (effectiveRole && effectiveRole !== 'super_admin') {
-      fetchPermissionsForRole(effectiveRole, collection.name, controller.signal)
-        .then((p) => { if (!controller.signal.aborted) setPermOverride(p); })
-        .catch(() => {});
+    // Fetch permissions for all of the user's real NocoBase roles
+    const realRoleNames = (user?.roles ?? []).map((r) => r.name);
+    if (realRoleNames.length > 0 && !realRoleNames.includes('super_admin')) {
+      Promise.all(
+        realRoleNames.map((rn) =>
+          fetchPermissionsForRole(rn, collection.name, controller.signal).catch(() => null),
+        ),
+      ).then((results) => {
+        if (controller.signal.aborted) return;
+        setPermOverrides(results.filter((r): r is TablePermissionRow => r !== null));
+      });
     }
     return () => controller.abort();
-  }, [collection.name, loadFields, projectRole, role]);
+  }, [collection.name, loadFields, user?.roles]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -173,21 +179,28 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
   };
 
   const isSuperAdmin = role === 'super_admin';
-  const effectiveRole = projectRole || role;
 
-  // If a permission override exists for this role+collection, use it.
-  // Otherwise fall back to the default role-based logic.
-  const hasOverride = permOverride !== null;
+  // Merge all permission overrides: if any role grants a permission, it's granted.
+  // If at least one override exists, use overrides exclusively (no fallback to defaults).
+  const hasOverride = permOverrides.length > 0;
+  const mergedPerms = hasOverride
+    ? {
+        can_view: permOverrides.some((p) => p.can_view),
+        can_create: permOverrides.some((p) => p.can_create),
+        can_edit: permOverrides.some((p) => p.can_edit),
+        can_delete: permOverrides.some((p) => p.can_delete),
+      }
+    : null;
   const canCreate = isSuperAdmin || (hasOverride
-    ? permOverride!.can_create
+    ? mergedPerms!.can_create
     : (role !== 'leitor' && projectRole !== 'leitor' && projectRole !== 'none')) && !collection.unavailableActions?.includes('create');
   const canEdit = isSuperAdmin || (hasOverride
-    ? permOverride!.can_edit
+    ? mergedPerms!.can_edit
     : (role !== 'leitor' && projectRole !== 'leitor' && projectRole !== 'none')) && !collection.unavailableActions?.includes('update');
   const canDelete = isSuperAdmin || (hasOverride
-    ? permOverride!.can_delete
+    ? mergedPerms!.can_delete
     : (role === 'admin' || projectRole === 'admin_projeto')) && !collection.unavailableActions?.includes('destroy');
-  const canView = isSuperAdmin || (hasOverride ? permOverride!.can_view : true);
+  const canView = isSuperAdmin || (hasOverride ? mergedPerms!.can_view : true);
 
   return (
     <div className="flex h-full flex-col">

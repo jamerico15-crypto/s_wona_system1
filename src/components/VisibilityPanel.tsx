@@ -3,8 +3,9 @@ import {
   Table2, Eye, EyeOff, Search, Loader2, AlertTriangle, RefreshCw,
   Rows3, Rows4, ChevronRight, Columns3, Info, Users,
 } from 'lucide-react';
-import { fetchFields, NocoDBError } from '@/services/nocodb';
+import { fetchFields, fetchRoles, NocoDBError } from '@/services/nocodb';
 import type { NocoBaseCollection, NocoBaseField } from '@/types/nocodb';
+import type { NocoBaseRole } from '@/services/nocodb';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useLanguage } from '@/hooks/useLanguage';
 
@@ -12,16 +13,7 @@ import { useToast } from '@/components/Toast';
 import { displayTitle } from '@/components/Sidebar';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
 
-const ROLE_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Todos os cargos (global)' },
-  { value: 'super_admin', label: 'Super Admin' },
-  { value: 'admin', label: 'Admin' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'leitor', label: 'Leitor' },
-  { value: 'admin_projeto', label: 'Admin de Projeto' },
-  { value: 'editor_projeto', label: 'Editor de Projeto' },
-  { value: 'leitor_projeto', label: 'Leitor de Projeto' },
-];
+
 
 interface VisibilityPanelProps {
   collections: NocoBaseCollection[];
@@ -43,6 +35,7 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
     loading: visibilityLoading,
   } = useVisibility();
 
+  const [roles, setRoles] = useState<NocoBaseRole[]>([]);
   const [activeCollectionName, setActiveCollectionName] = useState<string | null>(null);
   const [fields, setFields] = useState<NocoBaseField[]>([]);
   const [loadingFields, setLoadingFields] = useState(false);
@@ -91,6 +84,10 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
     } finally {
       setLoadingFields(false);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchRoles().then(setRoles).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -176,8 +173,9 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
                 onChange={(e) => setActiveRole(e.target.value || null)}
                 className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition focus:border-slate-400 focus:bg-white focus:outline-none"
               >
-                {ROLE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <option value="">Todos os cargos (global)</option>
+                {roles.map((r) => (
+                  <option key={r.name} value={r.name}>{r.title || r.name}</option>
                 ))}
               </select>
             </div>

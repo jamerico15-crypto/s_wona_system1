@@ -7,23 +7,17 @@ import {
   fetchTablePermissions,
   upsertTablePermission,
   deleteTablePermission,
+  fetchRoles,
   type TablePermissionRow,
   type TablePermission,
+  type NocoBaseRole,
 } from '@/services/nocodb';
 import type { NocoBaseCollection } from '@/types/nocodb';
 import { useToast } from '@/components/Toast';
 import { displayTitle } from '@/components/Sidebar';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
 
-const ROLE_OPTIONS: { value: string; label: string }[] = [
-  { value: 'super_admin', label: 'Super Admin' },
-  { value: 'admin', label: 'Admin' },
-  { value: 'editor', label: 'Editor' },
-  { value: 'leitor', label: 'Leitor' },
-  { value: 'admin_projeto', label: 'Admin de Projeto' },
-  { value: 'editor_projeto', label: 'Editor de Projeto' },
-  { value: 'leitor_projeto', label: 'Leitor de Projeto' },
-];
+
 
 const PERMISSION_META: { key: TablePermission; label: string; icon: typeof Eye; color: string }[] = [
   { key: 'view', label: 'Visualizar', icon: Eye, color: 'text-blue-600' },
@@ -38,7 +32,8 @@ interface PermissionPanelProps {
 
 export default function PermissionPanel({ collections }: PermissionPanelProps) {
   const { notify } = useToast();
-  const [selectedRole, setSelectedRole] = useState<string>('leitor');
+  const [roles, setRoles] = useState<NocoBaseRole[]>([]);
+  const [selectedRole, setSelectedRole] = useState<string>('');
   const [search, setSearch] = useState('');
   const [permissions, setPermissions] = useState<TablePermissionRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,7 +53,16 @@ export default function PermissionPanel({ collections }: PermissionPanelProps) {
   }, []);
 
   useEffect(() => {
-    loadPermissions(selectedRole);
+    fetchRoles()
+      .then((r) => {
+        setRoles(r);
+        if (r.length > 0 && !selectedRole) setSelectedRole(r[0].name);
+      })
+      .catch(() => {});
+  }, [selectedRole]);
+
+  useEffect(() => {
+    if (selectedRole) loadPermissions(selectedRole);
   }, [selectedRole, loadPermissions]);
 
   const permMap = useMemo(() => {
@@ -190,8 +194,8 @@ export default function PermissionPanel({ collections }: PermissionPanelProps) {
                 onChange={(e) => setSelectedRole(e.target.value)}
                 className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition focus:border-slate-400 focus:bg-white focus:outline-none"
               >
-                {ROLE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                {roles.map((r) => (
+                  <option key={r.name} value={r.name}>{r.title || r.name}</option>
                 ))}
               </select>
             </div>
@@ -317,7 +321,7 @@ export default function PermissionPanel({ collections }: PermissionPanelProps) {
                     <code className="rounded bg-slate-100 px-1">{activeCollectionData.name}</code>
                     {' · '}
                     Cargo: <span className="font-medium text-slate-700">
-                      {ROLE_OPTIONS.find((r) => r.value === selectedRole)?.label}
+                      {roles.find((r) => r.name === selectedRole)?.title || selectedRole}
                     </span>
                   </p>
                 </div>
@@ -337,7 +341,7 @@ export default function PermissionPanel({ collections }: PermissionPanelProps) {
                   <p className="text-sm font-medium text-slate-600">
                     Atribua as permissoes para o cargo{' '}
                     <span className="font-bold text-slate-800">
-                      {ROLE_OPTIONS.find((r) => r.value === selectedRole)?.label}
+                      {roles.find((r) => r.name === selectedRole)?.title || selectedRole}
                     </span>{' '}
                     na tabela{' '}
                     <span className="font-bold text-slate-800">{displayTitle(activeCollectionData)}</span>:
