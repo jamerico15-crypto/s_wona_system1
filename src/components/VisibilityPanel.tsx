@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, type MouseEvent } from 'react';
 import {
   Table2, Eye, EyeOff, Search, Loader2, AlertTriangle, RefreshCw,
-  Rows3, Rows4, ChevronRight, Columns3, Info,
+  Rows3, Rows4, ChevronRight, Columns3, Info, Users,
 } from 'lucide-react';
 import { fetchFields, NocoDBError } from '@/services/nocodb';
 import type { NocoBaseCollection, NocoBaseField } from '@/types/nocodb';
@@ -11,6 +11,17 @@ import { useLanguage } from '@/hooks/useLanguage';
 import { useToast } from '@/components/Toast';
 import { displayTitle } from '@/components/Sidebar';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
+
+const ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Todos os cargos (global)' },
+  { value: 'super_admin', label: 'Super Admin' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'editor', label: 'Editor' },
+  { value: 'leitor', label: 'Leitor' },
+  { value: 'admin_projeto', label: 'Admin de Projeto' },
+  { value: 'editor_projeto', label: 'Editor de Projeto' },
+  { value: 'leitor_projeto', label: 'Leitor de Projeto' },
+];
 
 interface VisibilityPanelProps {
   collections: NocoBaseCollection[];
@@ -27,6 +38,9 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
     density,
     setDensity,
     hiddenFieldCount,
+    activeRole,
+    setActiveRole,
+    loading: visibilityLoading,
   } = useVisibility();
 
   const [activeCollectionName, setActiveCollectionName] = useState<string | null>(null);
@@ -153,35 +167,51 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
             </div>
           </div>
 
-          {/* Density selector */}
-          <div className="hidden items-center gap-2 sm:flex">
-          <span className="text-xs font-medium text-slate-400">{t('visibility.density')}</span>
-          <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
-            <button
-              onClick={() => setDensity('compact')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                density === 'compact'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Rows3 className="h-3.5 w-3.5" />
-              {t('visibility.compact')}
-            </button>
-            <button
-              onClick={() => setDensity('comfortable')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                density === 'comfortable'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Rows4 className="h-3.5 w-3.5" />
-              {t('visibility.comfortable')}
-            </button>
+          <div className="flex items-center gap-3">
+            {/* Role selector */}
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-slate-400" />
+              <select
+                value={activeRole ?? ''}
+                onChange={(e) => setActiveRole(e.target.value || null)}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition focus:border-slate-400 focus:bg-white focus:outline-none"
+              >
+                {ROLE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Density selector */}
+            <div className="hidden items-center gap-2 sm:flex">
+              <span className="text-xs font-medium text-slate-400">{t('visibility.density')}</span>
+              <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                <button
+                  onClick={() => setDensity('compact')}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    density === 'compact'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Rows3 className="h-3.5 w-3.5" />
+                  {t('visibility.compact')}
+                </button>
+                <button
+                  onClick={() => setDensity('comfortable')}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    density === 'comfortable'
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Rows4 className="h-3.5 w-3.5" />
+                  {t('visibility.comfortable')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
       </div>
 
       {/* Split screen */}

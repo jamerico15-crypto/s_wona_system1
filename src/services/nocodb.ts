@@ -680,14 +680,57 @@ export interface VisibilitySettingRow {
   collection_name: string;
   field_name: string | null;
   visible: boolean;
+  role: string | null;
 }
 
-export async function fetchVisibilitySettings(signal?: AbortSignal): Promise<VisibilitySettingRow[]> {
-  if (!isConfigured()) return [];
+let roleColumnEnsured = false;
+
+async function ensureRoleColumn(signal?: AbortSignal): Promise<void> {
+  if (roleColumnEnsured) return;
   try {
+    await createField('visibility_settings', {
+      name: 'role',
+      interface: 'select',
+      type: 'string',
+      uiSchema: {
+        'x-component': 'Select',
+        'x-component-props': {
+          options: [
+            { label: 'super_admin', value: 'super_admin' },
+            { label: 'admin', value: 'admin' },
+            { label: 'editor', value: 'editor' },
+            { label: 'leitor', value: 'leitor' },
+            { label: 'admin_projeto', value: 'admin_projeto' },
+            { label: 'editor_projeto', value: 'editor_projeto' },
+            { label: 'leitor_projeto', value: 'leitor_projeto' },
+          ],
+        },
+      },
+    }, signal);
+  } catch {
+    // Column may already exist — that's fine
+  }
+  roleColumnEnsured = true;
+}
+
+export async function fetchVisibilitySettings(
+  role?: string | null,
+  signal?: AbortSignal,
+): Promise<VisibilitySettingRow[]> {
+  if (!isConfigured()) return [];
+  await ensureRoleColumn(signal);
+  try {
+    const filter: Record<string, unknown> = {};
+    if (role) {
+      filter.$or = [
+        { role: role },
+        { role: null },
+      ];
+    }
     const data = await fetchRecords('visibility_settings', {
       page: 1,
       pageSize: 500,
+      filter: Object.keys(filter).length > 0 ? filter : undefined,
       signal,
     });
     return (data.data ?? []).map((r) => ({
@@ -695,6 +738,7 @@ export async function fetchVisibilitySettings(signal?: AbortSignal): Promise<Vis
       collection_name: r.collection_name as string,
       field_name: (r.field_name as string | null) ?? null,
       visible: r.visible as boolean,
+      role: (r.role as string | null) ?? null,
     }));
   } catch {
     return [];
@@ -705,13 +749,23 @@ export async function upsertVisibilitySetting(
   collectionName: string,
   fieldName: string | null,
   visible: boolean,
+  role?: string | null,
   signal?: AbortSignal,
 ): Promise<void> {
   if (!isConfigured()) return;
-  const filter = {
+  await ensureRoleColumn(signal);
+  const filter: Record<string, unknown> = {
     collection_name: collectionName,
     field_name: fieldName,
   };
+  if (role) {
+    filter.$or = [
+      { role: role },
+      { role: null },
+    ];
+  } else {
+    filter.role = null;
+  }
   const existing = await fetchRecords('visibility_settings', {
     page: 1,
     pageSize: 1,
@@ -727,6 +781,7 @@ export async function upsertVisibilitySetting(
       collection_name: collectionName,
       field_name: fieldName,
       visible,
+      role: role ?? null,
     }, signal);
   }
 }

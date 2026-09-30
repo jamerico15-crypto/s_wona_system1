@@ -25,6 +25,8 @@ export interface VisibilityContextValue {
   setDensity: (d: Density) => void;
   hiddenFieldCount: (collectionName: string) => number;
   loading: boolean;
+  activeRole: string | null;
+  setActiveRole: (role: string | null) => void;
 }
 
 export const VisibilityContext = createContext<VisibilityContextValue | null>(null);
@@ -59,20 +61,22 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<VisibilityState>({ collections: {}, fields: {} });
   const [density, setDensityState] = useState<Density>(loadDensity);
   const [loading, setLoading] = useState(true);
+  const [activeRole, setActiveRoleState] = useState<string | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     async function load() {
-      const rows = await fetchVisibilitySettings();
+      const rows = await fetchVisibilitySettings(activeRole);
       if (cancelled) return;
       setState(parseRows(rows));
       setLoading(false);
     }
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [activeRole]);
 
   useEffect(() => {
     try {
@@ -98,8 +102,8 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
       ...prev,
       collections: { ...prev.collections, [name]: visible },
     }));
-    upsertVisibilitySetting(name, null, visible);
-  }, []);
+    upsertVisibilitySetting(name, null, visible, activeRole);
+  }, [activeRole]);
 
   const setFieldVisible = useCallback(
     (collectionName: string, fieldName: string, visible: boolean) => {
@@ -113,9 +117,9 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
           },
         };
       });
-      upsertVisibilitySetting(collectionName, fieldName, visible);
+      upsertVisibilitySetting(collectionName, fieldName, visible, activeRole);
     },
-    [],
+    [activeRole],
   );
 
   const toggleCollection = useCallback((name: string) => {
@@ -124,8 +128,8 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
       ...prev,
       collections: { ...prev.collections, [name]: !current },
     }));
-    upsertVisibilitySetting(name, null, !current);
-  }, []);
+    upsertVisibilitySetting(name, null, !current, activeRole);
+  }, [activeRole]);
 
   const toggleField = useCallback((collectionName: string, fieldName: string) => {
     const current = stateRef.current.fields[collectionName]?.[fieldName] !== false;
@@ -139,10 +143,14 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
         },
       };
     });
-    upsertVisibilitySetting(collectionName, fieldName, !current);
-  }, []);
+    upsertVisibilitySetting(collectionName, fieldName, !current, activeRole);
+  }, [activeRole]);
 
   const setDensity = useCallback((d: Density) => setDensityState(d), []);
+
+  const setActiveRole = useCallback((role: string | null) => {
+    setActiveRoleState(role);
+  }, []);
 
   const hiddenFieldCount = useCallback(
     (collectionName: string) => {
@@ -166,6 +174,8 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
         setDensity,
         hiddenFieldCount,
         loading,
+        activeRole,
+        setActiveRole,
       }}
     >
       {children}

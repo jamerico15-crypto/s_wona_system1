@@ -69,8 +69,14 @@ export default function Sidebar({
     }
   });
   const { branding } = useBranding();
-  const { collectionVisible } = useVisibility();
+  const { collectionVisible, setActiveRole } = useVisibility();
   const { t } = useLanguage();
+
+  // Sync the visibility context's active role to the current user's role
+  // so that role-specific visibility settings are applied in the sidebar.
+  useEffect(() => {
+    setActiveRole(user?.role ?? null);
+  }, [user?.role, setActiveRole]);
 
   // Dynamic prefix-based filtering:
   // - super_admin / admin: see ALL collections (no prefix filter)
