@@ -3,7 +3,7 @@ import {
   FolderKanban, Plus, ArrowRight, Loader2, AlertTriangle,
   RefreshCw, ShieldCheck, X, UserCircle, ChevronDown, Palette,
   Pencil, Trash2, BarChart3, CheckCircle2, Clock, PauseCircle, Activity,
-  Settings as SettingsIcon, Link2, Table2,
+  Settings as SettingsIcon, Link2, Table2, Eye,
 } from 'lucide-react';
 import {
   fetchRecords, createRecord, updateRecord, deleteRecord,
@@ -24,13 +24,16 @@ import AccessMatrix from '@/components/AccessMatrix';
 import UserProjectManager from '@/components/UserProjectManager';
 import ProjectTableVisibility from '@/components/ProjectTableVisibility';
 import ProjectVisibility from '@/components/ProjectVisibility';
+import VisibilityPanel from '@/components/VisibilityPanel';
+import { fetchCollections } from '@/services/nocodb';
+import type { NocoBaseCollection } from '@/types/nocodb';
 
 
 interface MainAdminPageProps {
   onEnterProject: (project: Project) => void;
 }
 
-type AdminTab = 'projects' | 'users' | 'tables' | 'projectVisibility' | 'settings';
+type AdminTab = 'projects' | 'users' | 'tables' | 'projectVisibility' | 'visibility' | 'settings';
 
 export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const { user, logout, role, assignedProjects } = useAuth();
@@ -45,6 +48,7 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>('projects');
+  const [allCollections, setAllCollections] = useState<NocoBaseCollection[]>([]);
   const { branding } = useBranding();
   const { t } = useLanguage();
 
@@ -56,6 +60,15 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
       setActiveTab('projects');
     }
   }, [isSuperAdmin, activeTab]);
+
+  useEffect(() => {
+    if (!isSuperAdmin || allCollections.length > 0) return;
+    let cancelled = false;
+    fetchCollections()
+      .then((cols) => { if (!cancelled) setAllCollections(cols); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isSuperAdmin, allCollections.length]);
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -196,6 +209,15 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
 
         {isSuperAdmin && (
           <TabButton
+            active={activeTab === 'visibility'}
+            onClick={() => setActiveTab('visibility')}
+            icon={<Eye className="h-4 w-4" />}
+            label="Visibilidade Global"
+          />
+        )}
+
+        {isSuperAdmin && (
+          <TabButton
             active={activeTab === 'settings'}
             onClick={() => setActiveTab('settings')}
             icon={<SettingsIcon className="h-4 w-4" />}
@@ -235,6 +257,12 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
 
         {activeTab === 'projectVisibility' && isSuperAdmin && (
           <ProjectVisibility />
+        )}
+
+        {activeTab === 'visibility' && isSuperAdmin && (
+          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden" style={{ height: 'calc(100vh - 220px)' }}>
+            <VisibilityPanel collections={allCollections} />
+          </div>
         )}
 
         {activeTab === 'settings' && isSuperAdmin && (
