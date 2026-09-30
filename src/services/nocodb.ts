@@ -1164,7 +1164,9 @@ export async function ensureProjectVisibilityTable(signal?: AbortSignal): Promis
         interface: 'switch',
         type: 'boolean',
       }, signal);
-    } catch { /* ignore */ }
+    } catch {
+      /* table creation may fail if permissions are insufficient — fetches will return empty */
+    }
   }
   pvTableEnsured = true;
 }

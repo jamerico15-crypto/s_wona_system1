@@ -45,11 +45,11 @@ export default function ProjectTableVisibility() {
     setLoading(true);
     try {
       const [projs, cols, usrs, rls, asgns] = await Promise.all([
-        fetchAllProjects(),
-        fetchCollections(),
-        fetchUsers(),
-        fetchRoles(),
-        fetchAllUserProjectAssignments(),
+        fetchAllProjects().catch(() => []),
+        fetchCollections().catch(() => []),
+        fetchUsers().catch(() => []),
+        fetchRoles().catch(() => []),
+        fetchAllUserProjectAssignments().catch(() => []),
       ]);
       setProjects(projs);
       setAllCollections(cols);

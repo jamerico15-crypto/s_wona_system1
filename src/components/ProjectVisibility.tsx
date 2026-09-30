@@ -31,8 +31,8 @@ export default function ProjectVisibility() {
     setLoading(true);
     try {
       const [projs, usrs] = await Promise.all([
-        fetchAllProjects(),
-        fetchUsers(),
+        fetchAllProjects().catch(() => []),
+        fetchUsers().catch(() => []),
       ]);
       setProjects(projs);
       setUsers(usrs);
