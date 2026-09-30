@@ -938,11 +938,46 @@ export interface ProjectTableVisibilityRow {
   visible: boolean;
 }
 
+let ptvTableEnsured = false;
+
+export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): Promise<void> {
+  if (!isConfigured() || ptvTableEnsured) return;
+  try {
+    await fetchRecords('project_table_visibility', { page: 1, pageSize: 1, signal });
+    ptvTableEnsured = true;
+  } catch {
+    // Table doesn't exist — create it
+    try {
+      await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Projeto', signal);
+      await createField('project_table_visibility', {
+        name: 'project_id',
+        interface: 'integer',
+        type: 'integer',
+      }, signal);
+      await createField('project_table_visibility', {
+        name: 'collection_name',
+        interface: 'input',
+        type: 'string',
+      }, signal);
+      await createField('project_table_visibility', {
+        name: 'visible',
+        interface: 'switch',
+        type: 'boolean',
+      }, signal);
+      ptvTableEnsured = true;
+    } catch {
+      // If creation fails (e.g. no permission), mark as ensured to avoid retrying
+      ptvTableEnsured = true;
+    }
+  }
+}
+
 export async function fetchProjectTableVisibility(
   projectId: string | number,
   signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
   if (!isConfigured()) return [];
+  await ensureProjectTableVisibilityTable(signal);
   try {
     const data = await fetchRecords('project_table_visibility', {
       page: 1,
@@ -968,6 +1003,7 @@ export async function upsertProjectTableVisibility(
   signal?: AbortSignal,
 ): Promise<void> {
   if (!isConfigured()) return;
+  await ensureProjectTableVisibilityTable(signal);
   const existing = await fetchRecords('project_table_visibility', {
     page: 1,
     pageSize: 1,
@@ -991,6 +1027,7 @@ export async function fetchAllProjectTableVisibility(
   signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
   if (!isConfigured()) return [];
+  await ensureProjectTableVisibilityTable(signal);
   try {
     const data = await fetchRecords('project_table_visibility', {
       page: 1,
