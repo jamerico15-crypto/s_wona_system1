@@ -929,121 +929,66 @@ export async function deleteUserProjectAssignment(
   await deleteRecord('usuarios_projetos', assignmentId, signal);
 }
 
-// ─── Project table visibility ─────────────────────────────────────────────
+// ─── Project table visibility (stored in Supabase) ───────────────────────
 
 export interface ProjectTableVisibilityRow {
-  id?: string | number;
-  project_id: string | number;
+  id?: string;
+  project_id: string;
   collection_name: string;
   visible: boolean;
 }
 
-let ptvTableEnsured = false;
-
-export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): Promise<void> {
-  if (!isConfigured() || ptvTableEnsured) return;
-  try {
-    await fetchRecords('project_table_visibility', { page: 1, pageSize: 1, signal });
-    ptvTableEnsured = true;
-  } catch {
-    // Table doesn't exist — create it
-    try {
-      await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Projeto', signal);
-      await createField('project_table_visibility', {
-        name: 'project_id',
-        interface: 'input',
-        type: 'string',
-      }, signal);
-      await createField('project_table_visibility', {
-        name: 'collection_name',
-        interface: 'input',
-        type: 'string',
-      }, signal);
-      await createField('project_table_visibility', {
-        name: 'visible',
-        interface: 'switch',
-        type: 'boolean',
-      }, signal);
-      ptvTableEnsured = true;
-    } catch {
-      // If creation fails (e.g. no permission), mark as ensured to avoid retrying
-      ptvTableEnsured = true;
-    }
-  }
-}
-
 export async function fetchProjectTableVisibility(
   projectId: string | number,
-  signal?: AbortSignal,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
-  if (!isConfigured()) return [];
-  await ensureProjectTableVisibilityTable(signal);
-  try {
-    const data = await fetchRecords('project_table_visibility', {
-      page: 1,
-      pageSize: 500,
-      filter: { project_id: String(projectId) },
-      signal,
-    });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
-      project_id: r.project_id as string | number,
-      collection_name: r.collection_name as string,
-      visible: r.visible as boolean,
-    }));
-  } catch {
-    return [];
-  }
+  const { supabase } = await import('@/services/supabase');
+  const { data, error } = await supabase
+    .from('project_table_visibility')
+    .select('id, project_id, collection_name, visible')
+    .eq('project_id', String(projectId));
+  if (error) return [];
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    project_id: r.project_id as string,
+    collection_name: r.collection_name as string,
+    visible: r.visible as boolean,
+  }));
 }
 
 export async function upsertProjectTableVisibility(
   projectId: string | number,
   collectionName: string,
   visible: boolean,
-  signal?: AbortSignal,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _signal?: AbortSignal,
 ): Promise<void> {
-  if (!isConfigured()) return;
-  await ensureProjectTableVisibilityTable(signal);
-  const pid = String(projectId);
-  const existing = await fetchRecords('project_table_visibility', {
-    page: 1,
-    pageSize: 1,
-    filter: { project_id: pid, collection_name: collectionName },
-    signal,
-  });
-  const row = existing.data?.[0];
-  if (row) {
-    const updateUrl = `${cleanUrl()}/api/project_table_visibility:update?filterByTk=${encodeURIComponent(String(row.id))}`;
-    await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
-  } else {
-    await createRecord('project_table_visibility', {
-      project_id: pid,
-      collection_name: collectionName,
-      visible,
-    }, signal);
-  }
+  const { supabase } = await import('@/services/supabase');
+  const { error } = await supabase
+    .from('project_table_visibility')
+    .upsert(
+      { project_id: String(projectId), collection_name: collectionName, visible },
+      { onConflict: 'project_id,collection_name' },
+    );
+  if (error) throw new NocoDBError(`Falha ao guardar visibilidade: ${error.message}`);
 }
 
 export async function fetchAllProjectTableVisibility(
-  signal?: AbortSignal,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
-  if (!isConfigured()) return [];
-  await ensureProjectTableVisibilityTable(signal);
-  try {
-    const data = await fetchRecords('project_table_visibility', {
-      page: 1,
-      pageSize: 1000,
-      signal,
-    });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
-      project_id: r.project_id as string | number,
-      collection_name: r.collection_name as string,
-      visible: r.visible as boolean,
-    }));
-  } catch {
-    return [];
-  }
+  const { supabase } = await import('@/services/supabase');
+  const { data, error } = await supabase
+    .from('project_table_visibility')
+    .select('id, project_id, collection_name, visible');
+  if (error) return [];
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    project_id: r.project_id as string,
+    collection_name: r.collection_name as string,
+    visible: r.visible as boolean,
+  }));
 }
 
 
