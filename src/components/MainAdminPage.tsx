@@ -51,6 +51,12 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const canManage = role === 'super_admin' || role === 'admin';
   const isSuperAdmin = role === 'super_admin';
 
+  useEffect(() => {
+    if (!isSuperAdmin && activeTab !== 'projects') {
+      setActiveTab('projects');
+    }
+  }, [isSuperAdmin, activeTab]);
+
   const loadProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -188,12 +194,14 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
           />
         )}
 
-        <TabButton
-          active={activeTab === 'settings'}
-          onClick={() => setActiveTab('settings')}
-          icon={<SettingsIcon className="h-4 w-4" />}
-          label={t('admin.tabSettings')}
-        />
+        {isSuperAdmin && (
+          <TabButton
+            active={activeTab === 'settings'}
+            onClick={() => setActiveTab('settings')}
+            icon={<SettingsIcon className="h-4 w-4" />}
+            label={t('admin.tabSettings')}
+          />
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
@@ -229,7 +237,7 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
           <ProjectVisibility />
         )}
 
-        {activeTab === 'settings' && (
+        {activeTab === 'settings' && isSuperAdmin && (
           <SettingsTab
             onOpenBranding={() => setShowBrandingModal(true)}
           />
