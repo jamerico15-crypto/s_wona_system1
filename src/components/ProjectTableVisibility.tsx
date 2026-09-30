@@ -6,13 +6,15 @@ import {
 import {
   fetchCollections,
   fetchAllProjects,
-  fetchProjectTableVisibility,
-  upsertProjectTableVisibility,
   NocoDBError,
   type NocoBaseCollection,
   type ProjectInfo,
-  type ProjectTableVisibilityRow,
 } from '@/services/nocodb';
+import {
+  fetchProjectTableVisibilitySupabase,
+  upsertProjectTableVisibilitySupabase,
+  type ProjectTableVisibilityRow,
+} from '@/services/projectVisibility';
 import { useToast } from '@/components/Toast';
 import { useLanguage } from '@/hooks/useLanguage';
 import { TLM_PRIMARY } from '@/config/theme';
@@ -57,7 +59,7 @@ export default function ProjectTableVisibility() {
   const loadVisibility = useCallback(async (projectId: string | number) => {
     setLoadingVisibility(true);
     try {
-      const rows = await fetchProjectTableVisibility(projectId);
+      const rows = await fetchProjectTableVisibilitySupabase(projectId);
       setVisibilityRows(rows);
     } catch {
       setVisibilityRows([]);
@@ -106,7 +108,7 @@ export default function ProjectTableVisibility() {
       }];
     });
     try {
-      await upsertProjectTableVisibility(selectedProjectId, collectionName, next);
+      await upsertProjectTableVisibilitySupabase(selectedProjectId, collectionName, next);
       notify('success', next ? `Tabela "${collectionName}" agora visível.` : `Tabela "${collectionName}" ocultada.`);
     } catch (err) {
       const msg = err instanceof NocoDBError ? err.message : 'Falha ao atualizar visibilidade.';
