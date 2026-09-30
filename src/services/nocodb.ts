@@ -929,66 +929,147 @@ export async function deleteUserProjectAssignment(
   await deleteRecord('usuarios_projetos', assignmentId, signal);
 }
 
-// ─── Project table visibility (stored in Supabase) ───────────────────────
+// ─── Project table visibility (stored in NocoBase) ────────────────────────
 
 export interface ProjectTableVisibilityRow {
-  id?: string;
-  project_id: string;
+  id?: string | number;
+  project_id: string | number;
   collection_name: string;
   visible: boolean;
 }
 
+let ptvTableEnsured = false;
+
+async function recreatePtvTable(signal?: AbortSignal): Promise<void> {
+  // Delete existing table (may have wrong column type) and recreate with string project_id
+  try { await deleteCollection('project_table_visibility', signal); } catch { /* may not exist */ }
+  await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Projeto', signal);
+  await createField('project_table_visibility', {
+    name: 'project_id',
+    interface: 'input',
+    type: 'string',
+  }, signal);
+  await createField('project_table_visibility', {
+    name: 'collection_name',
+    interface: 'input',
+    type: 'string',
+  }, signal);
+  await createField('project_table_visibility', {
+    name: 'visible',
+    interface: 'switch',
+    type: 'boolean',
+  }, signal);
+}
+
+export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): Promise<void> {
+  if (!isConfigured() || ptvTableEnsured) return;
+  try {
+    // Check if table exists by listing fields
+    const fields = await fetchFields('project_table_visibility', signal);
+    const projectIdField = fields.find((f) => f.name === 'project_id');
+    if (projectIdField && projectIdField.type === 'integer') {
+      // Table exists but with wrong type — recreate it
+      await recreatePtvTable(signal);
+    }
+    ptvTableEnsured = true;
+  } catch {
+    // Table doesn't exist — create it
+    try {
+      await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Projeto', signal);
+      await createField('project_table_visibility', {
+        name: 'project_id',
+        interface: 'input',
+        type: 'string',
+      }, signal);
+      await createField('project_table_visibility', {
+        name: 'collection_name',
+        interface: 'input',
+        type: 'string',
+      }, signal);
+      await createField('project_table_visibility', {
+        name: 'visible',
+        interface: 'switch',
+        type: 'boolean',
+      }, signal);
+      ptvTableEnsured = true;
+    } catch {
+      ptvTableEnsured = true;
+    }
+  }
+}
+
 export async function fetchProjectTableVisibility(
   projectId: string | number,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _signal?: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
-  const { supabase } = await import('@/services/supabase');
-  const { data, error } = await supabase
-    .from('project_table_visibility')
-    .select('id, project_id, collection_name, visible')
-    .eq('project_id', String(projectId));
-  if (error) return [];
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    project_id: r.project_id as string,
-    collection_name: r.collection_name as string,
-    visible: r.visible as boolean,
-  }));
+  if (!isConfigured()) return [];
+  await ensureProjectTableVisibilityTable(signal);
+  try {
+    const data = await fetchRecords('project_table_visibility', {
+      page: 1,
+      pageSize: 500,
+      filter: { project_id: String(projectId) },
+      signal,
+    });
+    return (data.data ?? []).map((r) => ({
+      id: r.id as string | number,
+      project_id: r.project_id as string | number,
+      collection_name: r.collection_name as string,
+      visible: r.visible as boolean,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function upsertProjectTableVisibility(
   projectId: string | number,
   collectionName: string,
   visible: boolean,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _signal?: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const { supabase } = await import('@/services/supabase');
-  const { error } = await supabase
-    .from('project_table_visibility')
-    .upsert(
-      { project_id: String(projectId), collection_name: collectionName, visible },
-      { onConflict: 'project_id,collection_name' },
-    );
-  if (error) throw new NocoDBError(`Falha ao guardar visibilidade: ${error.message}`);
+  if (!isConfigured()) return;
+  await ensureProjectTableVisibilityTable(signal);
+  const pid = String(projectId);
+  const existing = await fetchRecords('project_table_visibility', {
+    page: 1,
+    pageSize: 1,
+    filter: { project_id: pid, collection_name: collectionName },
+    signal,
+  });
+  const row = existing.data?.[0];
+  if (row) {
+    const updateUrl = `${cleanUrl()}/api/project_table_visibility:update?filterByTk=${encodeURIComponent(String(row.id))}`;
+    await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
+  } else {
+    await createRecord('project_table_visibility', {
+      project_id: pid,
+      collection_name: collectionName,
+      visible,
+    }, signal);
+  }
 }
 
 export async function fetchAllProjectTableVisibility(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _signal?: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
-  const { supabase } = await import('@/services/supabase');
-  const { data, error } = await supabase
-    .from('project_table_visibility')
-    .select('id, project_id, collection_name, visible');
-  if (error) return [];
-  return (data ?? []).map((r) => ({
-    id: r.id as string,
-    project_id: r.project_id as string,
-    collection_name: r.collection_name as string,
-    visible: r.visible as boolean,
-  }));
+  if (!isConfigured()) return [];
+  await ensureProjectTableVisibilityTable(signal);
+  try {
+    const data = await fetchRecords('project_table_visibility', {
+      page: 1,
+      pageSize: 1000,
+      signal,
+    });
+    return (data.data ?? []).map((r) => ({
+      id: r.id as string | number,
+      project_id: r.project_id as string | number,
+      collection_name: r.collection_name as string,
+      visible: r.visible as boolean,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 
