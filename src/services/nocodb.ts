@@ -1003,7 +1003,6 @@ export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): P
         } catch { /* field may already exist */ }
       }
     }
-    ptvTableEnsured = true;
   } catch {
     try {
       await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Utilizador', signal);
@@ -1032,11 +1031,11 @@ export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): P
         interface: 'switch',
         type: 'boolean',
       }, signal);
-      ptvTableEnsured = true;
     } catch {
-      ptvTableEnsured = true;
+      /* table creation failed — fetches will return empty */
     }
   }
+  ptvTableEnsured = true;
 }
 
 export async function fetchProjectTableVisibility(
@@ -1145,28 +1144,32 @@ let pvTableEnsured = false;
 export async function ensureProjectVisibilityTable(signal?: AbortSignal): Promise<void> {
   if (!isConfigured() || pvTableEnsured) return;
   try {
-    await fetchFields('project_visibility', signal);
-  } catch {
     try {
-      await createCollection('project_visibility', 'Visibilidade de Projetos por Utilizador', signal);
-      await createField('project_visibility', {
-        name: 'user_id',
-        interface: 'input',
-        type: 'string',
-      }, signal);
-      await createField('project_visibility', {
-        name: 'project_id',
-        interface: 'input',
-        type: 'string',
-      }, signal);
-      await createField('project_visibility', {
-        name: 'visible',
-        interface: 'switch',
-        type: 'boolean',
-      }, signal);
+      await fetchFields('project_visibility', signal);
     } catch {
-      /* table creation may fail if permissions are insufficient — fetches will return empty */
+      try {
+        await createCollection('project_visibility', 'Visibilidade de Projetos por Utilizador', signal);
+        await createField('project_visibility', {
+          name: 'user_id',
+          interface: 'input',
+          type: 'string',
+        }, signal);
+        await createField('project_visibility', {
+          name: 'project_id',
+          interface: 'input',
+          type: 'string',
+        }, signal);
+        await createField('project_visibility', {
+          name: 'visible',
+          interface: 'switch',
+          type: 'boolean',
+        }, signal);
+      } catch {
+        /* table creation may fail — fetches will return empty */
+      }
     }
+  } catch {
+    /* never let table ensure throw */
   }
   pvTableEnsured = true;
 }
@@ -1227,21 +1230,25 @@ export async function upsertProjectVisibility(
   await ensureProjectVisibilityTable(signal);
   const uid = String(userId);
   const pid = String(projectId);
-  const existing = await fetchRecords('project_visibility', {
-    page: 1,
-    pageSize: 1,
-    filter: { user_id: uid, project_id: pid },
-    signal,
-  });
-  const row = existing.data?.[0];
-  if (row) {
-    const updateUrl = `${cleanUrl()}/api/project_visibility:update?filterByTk=${encodeURIComponent(String(row.id))}`;
-    await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
-  } else {
-    await createRecord('project_visibility', {
-      user_id: uid,
-      project_id: pid,
-      visible,
-    }, signal);
+  try {
+    const existing = await fetchRecords('project_visibility', {
+      page: 1,
+      pageSize: 1,
+      filter: { user_id: uid, project_id: pid },
+      signal,
+    });
+    const row = existing.data?.[0];
+    if (row) {
+      const updateUrl = `${cleanUrl()}/api/project_visibility:update?filterByTk=${encodeURIComponent(String(row.id))}`;
+      await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
+    } else {
+      await createRecord('project_visibility', {
+        user_id: uid,
+        project_id: pid,
+        visible,
+      }, signal);
+    }
+  } catch {
+    /* table may not exist — ignore */
   }
 }
