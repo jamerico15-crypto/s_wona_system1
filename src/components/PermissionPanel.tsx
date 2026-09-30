@@ -121,8 +121,9 @@ export default function PermissionPanel({ collections }: PermissionPanelProps) {
       try {
         await upsertTablePermission(selectedRole, collectionName, perm, value);
         notify('success', `Permissao atualizada para ${collectionName}`);
-      } catch {
-        notify('error', `Erro ao atualizar permissao para ${collectionName}`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Erro desconhecido';
+        notify('error', `Erro ao atualizar permissao para ${collectionName}: ${msg}`);
         // Revert
         loadPermissions(selectedRole);
       } finally {

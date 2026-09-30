@@ -808,27 +808,32 @@ let tpTableEnsured = false;
 
 export async function ensureTablePermissionsTable(signal?: AbortSignal): Promise<void> {
   if (!isConfigured() || tpTableEnsured) return;
-  try {
-    await fetchFields('table_permissions', signal);
-  } catch {
-    try {
-      await createCollection('table_permissions', 'Permissoes por Tabela e Cargo', signal);
-    } catch { /* may already exist */ }
+
+  // Step 1: Check if the collection exists by listing its fields
+  let fields = await fetchFields('table_permissions', signal).catch(() => null);
+
+  // Step 2: If not, create the collection
+  if (!fields) {
+    await createCollection('table_permissions', 'Permissoes por Tabela e Cargo', signal).catch(() => {});
+    // Wait a moment for NocoBase to register the collection, then re-fetch
+    fields = await fetchFields('table_permissions', signal).catch(() => [] as NocoBaseField[]);
   }
-  const fields = await fetchFields('table_permissions', signal).catch(() => []);
+
+  if (!fields) fields = [];
+
+  // Step 3: Ensure all required fields exist
   const ensureField = async (name: string, iface: string, type: string) => {
-    if (!fields.find((f) => f.name === name)) {
-      try {
-        await createField('table_permissions', { name, interface: iface, type }, signal);
-      } catch { /* may already exist */ }
+    if (!fields!.find((f) => f.name === name)) {
+      await createField('table_permissions', { name, interface: iface, type }, signal).catch(() => {});
     }
   };
   await ensureField('role_name', 'input', 'string');
   await ensureField('collection_name', 'input', 'string');
-  await ensureField('can_view', 'switch', 'boolean');
-  await ensureField('can_create', 'switch', 'boolean');
-  await ensureField('can_edit', 'switch', 'boolean');
-  await ensureField('can_delete', 'switch', 'boolean');
+  await ensureField('can_view', 'checkbox', 'boolean');
+  await ensureField('can_create', 'checkbox', 'boolean');
+  await ensureField('can_edit', 'checkbox', 'boolean');
+  await ensureField('can_delete', 'checkbox', 'boolean');
+
   tpTableEnsured = true;
 }
 
@@ -869,6 +874,8 @@ export async function upsertTablePermission(
   signal?: AbortSignal,
 ): Promise<void> {
   if (!isConfigured()) return;
+  // Reset the ensured flag so we retry table creation if it failed before
+  tpTableEnsured = false;
   await ensureTablePermissionsTable(signal);
   const filter = { role_name: roleName, collection_name: collectionName };
   const existing = await fetchRecords('table_permissions', {
