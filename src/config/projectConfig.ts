@@ -142,7 +142,7 @@ export function isOlikanassa(projectId: string | number | null | undefined): boo
 }
 
 export function getProjectPrefix(projectId: string | number, projectName?: string): string {
-  if (isOlikanassa(projectId)) return '';
+  if (isOlikanassa(projectId)) return 'ol_';
   const slug = (projectName || `p${projectId}`)
     .toLowerCase()
     .normalize('NFD')
