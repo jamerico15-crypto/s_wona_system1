@@ -951,8 +951,8 @@ export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): P
       await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Projeto', signal);
       await createField('project_table_visibility', {
         name: 'project_id',
-        interface: 'integer',
-        type: 'integer',
+        interface: 'input',
+        type: 'string',
       }, signal);
       await createField('project_table_visibility', {
         name: 'collection_name',
@@ -982,7 +982,7 @@ export async function fetchProjectTableVisibility(
     const data = await fetchRecords('project_table_visibility', {
       page: 1,
       pageSize: 500,
-      filter: { project_id: projectId },
+      filter: { project_id: String(projectId) },
       signal,
     });
     return (data.data ?? []).map((r) => ({
@@ -1004,10 +1004,11 @@ export async function upsertProjectTableVisibility(
 ): Promise<void> {
   if (!isConfigured()) return;
   await ensureProjectTableVisibilityTable(signal);
+  const pid = String(projectId);
   const existing = await fetchRecords('project_table_visibility', {
     page: 1,
     pageSize: 1,
-    filter: { project_id: projectId, collection_name: collectionName },
+    filter: { project_id: pid, collection_name: collectionName },
     signal,
   });
   const row = existing.data?.[0];
@@ -1016,7 +1017,7 @@ export async function upsertProjectTableVisibility(
     await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
   } else {
     await createRecord('project_table_visibility', {
-      project_id: projectId,
+      project_id: pid,
       collection_name: collectionName,
       visible,
     }, signal);
