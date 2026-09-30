@@ -4,8 +4,11 @@ import {
 import {
   fetchVisibilitySettings,
   upsertVisibilitySetting,
+  fetchProjectTableVisibility,
   type VisibilitySettingRow,
+  type ProjectTableVisibilityRow,
 } from '@/services/nocodb';
+import { useProject } from '@/hooks/useProject';
 
 export type Density = 'compact' | 'comfortable';
 
@@ -57,11 +60,16 @@ function parseRows(rows: VisibilitySettingRow[]): VisibilityState {
 
 export function VisibilityProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<VisibilityState>({ collections: {}, fields: {} });
+  const [projectHidden, setProjectHidden] = useState<Set<string>>(new Set());
   const [density, setDensityState] = useState<Density>(loadDensity);
   const [loading, setLoading] = useState(true);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const { activeProject } = useProject();
+  const projectIdRef = useRef<string | number | null>(null);
+  projectIdRef.current = activeProject?.id ?? null;
 
+  // Load global visibility settings once
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -74,6 +82,27 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
+  // Load per-project table visibility whenever the active project changes
+  useEffect(() => {
+    const pid = activeProject?.id;
+    if (pid == null) {
+      setProjectHidden(new Set());
+      return;
+    }
+    let cancelled = false;
+    async function loadProjectVisibility() {
+      const rows: ProjectTableVisibilityRow[] = await fetchProjectTableVisibility(pid!);
+      if (cancelled) return;
+      const hidden = new Set<string>();
+      for (const row of rows) {
+        if (!row.visible) hidden.add(row.collection_name);
+      }
+      setProjectHidden(hidden);
+    }
+    loadProjectVisibility();
+    return () => { cancelled = true; };
+  }, [activeProject?.id]);
+
   useEffect(() => {
     try {
       localStorage.setItem(DENSITY_KEY, density);
@@ -83,9 +112,15 @@ export function VisibilityProvider({ children }: { children: ReactNode }) {
   }, [density]);
 
   const collectionVisible = useCallback(
-    (name: string) => state.collections[name] !== false,
-    [state.collections],
+    (name: string) => {
+      if (projectHiddenRef.current.has(name)) return false;
+      return stateRef.current.collections[name] !== false;
+    },
+    [],
   );
+
+  const projectHiddenRef = useRef(projectHidden);
+  projectHiddenRef.current = projectHidden;
 
   const fieldVisible = useCallback(
     (collectionName: string, fieldName: string) =>
