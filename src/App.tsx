@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Database, RefreshCw, AlertTriangle, Search, Loader2, FolderKanban, Menu, ShieldAlert, AlertCircle } from 'lucide-react';
 import Sidebar, { displayTitle, type SidebarView } from '@/components/Sidebar';
 import LanguageSelector from '@/components/LanguageSelector';
@@ -20,6 +20,7 @@ import {
   fetchCollectionsForProject,
   fetchCollectionsByPrefix,
   fetchRecords,
+  fetchProjectTableVisibility,
   getConfigStatus,
   NocoDBError,
 } from '@/services/nocodb';
@@ -57,6 +58,7 @@ export default function App() {
     resetProjectState, tablePrefix,
   } = useProject();
   const [collections, setCollections] = useState<NocoBaseCollection[]>([]);
+  const [projectHiddenTables, setProjectHiddenTables] = useState<Set<string>>(new Set());
   const [activeCollection, setActiveCollection] = useState<NocoBaseCollection | null>(null);
   const [search, setSearch] = useState('');
   const [loadingCollections, setLoadingCollections] = useState(true);
@@ -286,6 +288,32 @@ export default function App() {
     return () => controller.abort();
   }, [configured, user, activeProject, route, accessDenied, validatingAccess, loadCollections]);
 
+  useEffect(() => {
+    if (!activeProject || role === 'super_admin') {
+      setProjectHiddenTables(new Set());
+      return;
+    }
+    let cancelled = false;
+    fetchProjectTableVisibility(activeProject.id)
+      .then((rows) => {
+        if (cancelled) return;
+        const hidden = new Set<string>();
+        for (const row of rows) {
+          if (!row.visible) hidden.add(row.collection_name);
+        }
+        setProjectHiddenTables(hidden);
+      })
+      .catch(() => {
+        if (!cancelled) setProjectHiddenTables(new Set());
+      });
+    return () => { cancelled = true; };
+  }, [activeProject, role]);
+
+  const visibleCollections = useMemo(
+    () => collections.filter((c) => !projectHiddenTables.has(c.name)),
+    [collections, projectHiddenTables],
+  );
+
   const handleSelectCollection = (collection: NocoBaseCollection) => {
     setActiveCollection(collection);
   };
@@ -450,7 +478,7 @@ export default function App() {
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50 font-sans antialiased">
       <Sidebar
-        collections={collections}
+        collections={visibleCollections}
         activeCollectionName={activeCollection?.name ?? null}
         onSelect={handleSelectCollection}
         search={search}
@@ -529,14 +557,14 @@ export default function App() {
             </div>
           ) : view === 'builder' && showTableBuilder ? (
             <TableBuilder
-              collections={collections}
+              collections={visibleCollections}
               onTableCreated={handleTableCreated}
               onTableDeleted={handleTableDeleted}
             />
           ) : view === 'reports' ? (
-            <ReportCenter collections={collections} />
+            <ReportCenter collections={visibleCollections} />
           ) : view === 'dashboard' ? (
-            <AnalyticsDashboard collections={collections} />
+            <AnalyticsDashboard collections={visibleCollections} />
           ) : loadingCollections && !activeCollection ? (
             <div className="flex h-full items-center justify-center p-8">
               <div className="flex flex-col items-center gap-4">

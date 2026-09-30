@@ -929,4 +929,83 @@ export async function deleteUserProjectAssignment(
   await deleteRecord('usuarios_projetos', assignmentId, signal);
 }
 
+// ─── Project table visibility ─────────────────────────────────────────────
+
+export interface ProjectTableVisibilityRow {
+  id?: string | number;
+  project_id: string | number;
+  collection_name: string;
+  visible: boolean;
+}
+
+export async function fetchProjectTableVisibility(
+  projectId: string | number,
+  signal?: AbortSignal,
+): Promise<ProjectTableVisibilityRow[]> {
+  if (!isConfigured()) return [];
+  try {
+    const data = await fetchRecords('project_table_visibility', {
+      page: 1,
+      pageSize: 500,
+      filter: { project_id: projectId },
+      signal,
+    });
+    return (data.data ?? []).map((r) => ({
+      id: r.id as string | number,
+      project_id: r.project_id as string | number,
+      collection_name: r.collection_name as string,
+      visible: r.visible as boolean,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function upsertProjectTableVisibility(
+  projectId: string | number,
+  collectionName: string,
+  visible: boolean,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isConfigured()) return;
+  const existing = await fetchRecords('project_table_visibility', {
+    page: 1,
+    pageSize: 1,
+    filter: { project_id: projectId, collection_name: collectionName },
+    signal,
+  });
+  const row = existing.data?.[0];
+  if (row) {
+    const updateUrl = `${cleanUrl()}/api/project_table_visibility:update?filterByTk=${encodeURIComponent(String(row.id))}`;
+    await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
+  } else {
+    await createRecord('project_table_visibility', {
+      project_id: projectId,
+      collection_name: collectionName,
+      visible,
+    }, signal);
+  }
+}
+
+export async function fetchAllProjectTableVisibility(
+  signal?: AbortSignal,
+): Promise<ProjectTableVisibilityRow[]> {
+  if (!isConfigured()) return [];
+  try {
+    const data = await fetchRecords('project_table_visibility', {
+      page: 1,
+      pageSize: 1000,
+      signal,
+    });
+    return (data.data ?? []).map((r) => ({
+      id: r.id as string | number,
+      project_id: r.project_id as string | number,
+      collection_name: r.collection_name as string,
+      visible: r.visible as boolean,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 

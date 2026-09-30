@@ -3,7 +3,7 @@ import {
   FolderKanban, Plus, ArrowRight, Loader2, AlertTriangle,
   RefreshCw, ShieldCheck, X, UserCircle, ChevronDown, Palette,
   Pencil, Trash2, BarChart3, CheckCircle2, Clock, PauseCircle, Activity,
-  Settings as SettingsIcon, Link2,
+  Settings as SettingsIcon, Link2, Table2,
 } from 'lucide-react';
 import {
   fetchRecords, createRecord, updateRecord, deleteRecord,
@@ -22,13 +22,14 @@ import BrandingSettingsModal from '@/components/BrandingSettingsModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AccessMatrix from '@/components/AccessMatrix';
 import UserProjectManager from '@/components/UserProjectManager';
+import ProjectTableVisibility from '@/components/ProjectTableVisibility';
 
 
 interface MainAdminPageProps {
   onEnterProject: (project: Project) => void;
 }
 
-type AdminTab = 'projects' | 'users' | 'settings';
+type AdminTab = 'projects' | 'users' | 'tables' | 'settings';
 
 export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const { user, logout, role, assignedProjects } = useAuth();
@@ -169,6 +170,14 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
             label="Utilizadores"
           />
         )}
+        {isSuperAdmin && (
+          <TabButton
+            active={activeTab === 'tables'}
+            onClick={() => setActiveTab('tables')}
+            icon={<Table2 className="h-4 w-4" />}
+            label="Tabelas por Projeto"
+          />
+        )}
 
         <TabButton
           active={activeTab === 'settings'}
@@ -201,6 +210,10 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
 
         {activeTab === 'users' && isSuperAdmin && (
           <UserProjectManager />
+        )}
+
+        {activeTab === 'tables' && isSuperAdmin && (
+          <ProjectTableVisibility />
         )}
 
         {activeTab === 'settings' && (
