@@ -303,7 +303,7 @@ export default function PermissionPanel({ collections }: PermissionPanelProps) {
               </div>
               <h3 className="text-base font-semibold text-slate-600">Selecione uma tabela</h3>
               <p className="mt-1 text-sm text-slate-400">
-                Escolha uma tabela para configurar as permissoes do cargo {ROLE_OPTIONS.find((r) => r.value === selectedRole)?.label}
+                Escolha uma tabela para configurar as permissoes do cargo {roles.find((r) => r.name === selectedRole)?.title || selectedRole}
               </p>
             </div>
           ) : (
