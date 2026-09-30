@@ -31,7 +31,7 @@ function mapRole(user: NocoBaseUser): AppRole {
   const roleNames = user.roles.map((r) => r.name.trim().toLowerCase());
 
   if (roleNames.some((n) =>
-    n === 'super_admin' || n === 'root' || n === 'admin'
+    n === 'super_admin' || n === 'root'
     || n.startsWith('super') || n === 'system_admin'
   )) return 'super_admin';
 
