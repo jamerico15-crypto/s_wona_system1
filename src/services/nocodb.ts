@@ -1,14 +1,15 @@
+import { supabase } from '@/services/supabase';
+import { isGlobalTable } from '@/config/projectConfig';
 import type {
   NocoBaseCollection,
   NocoBaseField,
   NocoBaseListResponse,
   NocoBaseRecordList,
 } from '@/types/nocodb';
-import { isGlobalTable } from '@/config/projectConfig';
-import { supabase } from '@/services/supabase';
 
-const NOCOBASE_URL = import.meta.env.VITE_NOCODB_URL as string | undefined;
-const NOCOBASE_TOKEN = import.meta.env.VITE_NOCODB_TOKEN as string | undefined;
+export type { NocoBaseCollection, NocoBaseField, NocoBaseListResponse, NocoBaseRecordList };
+
+// ─── Error class (preserved for backwards compatibility) ──────────────────
 
 export class NocoDBError extends Error {
   status: number;
@@ -21,136 +22,88 @@ export class NocoDBError extends Error {
   }
 }
 
+// ─── Config (always configured — Supabase is provisioned) ──────────────────
+
 function isConfigured(): boolean {
-  return Boolean(NOCOBASE_TOKEN);
+  return true;
 }
 
 function getConfigStatus(): { configured: boolean; missing: string[] } {
-  const missing: string[] = [];
-  if (!NOCOBASE_TOKEN) missing.push('VITE_NOCODB_TOKEN');
-  return { configured: missing.length === 0, missing };
+  return { configured: true, missing: [] };
 }
 
-function authHeaders(userToken?: string | null): Record<string, string> {
-  return {
-    Authorization: `Bearer ${userToken ?? NOCOBASE_TOKEN}`,
-    'Content-Type': 'application/json',
-  };
+// ─── Table registry: maps logical names to Supabase table names ────────────
+
+const OLIKANASSA_TABLE_MAP: Record<string, string> = {
+  'projetos': 'projetos',
+  'goals': 'ol_goals',
+  'despesas': 'ol_despesas',
+  'diario_de_bordo': 'ol_diario_de_bordo',
+  'tarefas': 'ol_tarefas',
+  'report_settings': 'ol_report_settings',
+  'Outcomes1': 'ol_outcomes',
+  'Project_Objectives': 'ol_project_objectives',
+  'Outputs': 'ol_outputs',
+  'Indicator_Catalog': 'ol_indicator_catalog',
+  'indicator_measurements': 'ol_indicator_measurements',
+  'screenings': 'ol_screenings',
+  'pspark_casos_de_lepra': 'ol_pspark_casos_de_lepra',
+  'members': 'ol_members',
+  'liderancas': 'ol_liderancas',
+  'groups': 'ol_groups',
+  'food_security_support': 'ol_food_security_support',
+  'activity_attendance': 'ol_activity_attendance',
+  'group_activities': 'ol_group_activities',
+  'districts': 'ol_districts',
+  'villages': 'ol_villages',
+  'health_posts': 'ol_health_posts',
+  'health_workers': 'ol_health_workers',
+  'training_courses': 'ol_training_courses',
+  'health_training_attendees': 'ol_health_training_attendees',
+  'livelihood_training_attendees': 'ol_livelihood_training_attendees',
+  'communication_campaigns': 'ol_communication_campaigns',
+  'safeguarding_events': 'ol_safeguarding_events',
+  'climate_actions': 'ol_climate_actions',
+  'conexao_sync': 'ol_conexao_sync',
+  'monthly_screening': 'ol_monthly_screening',
+  'usuarios_projetos': 'usuarios_projetos',
+  'branding_settings': 'branding_settings',
+  'visibility_settings': 'visibility_settings',
+  'project_table_visibility': 'project_table_visibility',
+  'project_visibility': 'project_visibility',
+  'table_permissions': 'table_permissions',
+};
+
+const REVERSE_TABLE_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(OLIKANASSA_TABLE_MAP).map(([logical, physical]) => [physical, logical])
+);
+
+function resolveTableName(collectionName: string): string {
+  return OLIKANASSA_TABLE_MAP[collectionName] ?? collectionName;
 }
 
-interface RequestOptions {
-  method?: string;
-  body?: unknown;
-  signal?: AbortSignal;
-  token?: string | null;
-}
-
-async function request<T>(url: string, opts: RequestOptions = {}): Promise<T> {
-  const init: RequestInit = {
-    method: opts.method ?? 'GET',
-    headers: authHeaders(opts.token),
-    signal: opts.signal,
-  };
-  if (opts.body !== undefined) {
-    init.body = JSON.stringify(opts.body);
-  }
-
-  let resp: Response;
-  try {
-    resp = await fetch(url, init);
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') throw err;
-    throw new NocoDBError(
-      'Não foi possível conectar ao servidor. Verifique a URL, a ligação de rede e as definições de CORS.',
-      0,
-      true,
-    );
-  }
-
-  if (!resp.ok) {
-    let detail = '';
-    try {
-      const body = await resp.json();
-      detail = body?.message || body?.msg || body?.error || JSON.stringify(body);
-    } catch {
-      try {
-        detail = await resp.text();
-      } catch {
-        detail = '';
-      }
-    }
-    throw new NocoDBError(
-      `Erro ${resp.status} ao contactar o servidor${detail ? `: ${detail}` : ''}`,
-      resp.status,
-    );
-  }
-
-  if (resp.status === 204) return undefined as T;
-  try {
-    return (await resp.json()) as T;
-  } catch {
-    return undefined as T;
-  }
-}
-
-function cleanUrl(): string {
-  // Always use relative /api paths. In dev, the Vite proxy forwards to NocoBase.
-  // In production (Vercel), vercel.json rewrites /api/* to the NocoBase server.
-  // This avoids CORS issues in both environments.
-  return '';
-}
+// ─── Collections (table metadata) ──────────────────────────────────────────
 
 export async function fetchCollections(signal?: AbortSignal): Promise<NocoBaseCollection[]> {
-  if (!isConfigured()) {
-    const { missing } = getConfigStatus();
-    throw new NocoDBError(
-      `Configuração incompleta. Variáveis em falta no .env: ${missing.join(', ')}. Copie .env.example para .env e preencha os valores.`,
-    );
-  }
-  const all: NocoBaseCollection[] = [];
-  let page = 1;
-  const pageSize = 100;
-  while (true) {
-    const url = `${cleanUrl()}/api/collections:list?pageSize=${pageSize}&page=${page}`;
-    const data = await request<NocoBaseListResponse<NocoBaseCollection>>(url, { signal });
-    all.push(...data.data);
-    if (page >= data.meta.totalPage) break;
-    page++;
-  }
-  return all.filter((c) => !c.hidden && c.template !== 'sql');
+  const tableNames = Object.keys(OLIKANASSA_TABLE_MAP);
+  return tableNames.map((name) => ({
+    key: name,
+    name,
+    title: null,
+    template: 'general',
+    hidden: false,
+    description: null,
+  }));
 }
 
 export async function fetchCollectionsByPrefix(prefix: string, signal?: AbortSignal): Promise<NocoBaseCollection[]> {
-  if (!isConfigured()) {
-    const { missing } = getConfigStatus();
-    throw new NocoDBError(
-      `Configuração incompleta. Variáveis em falta no .env: ${missing.join(', ')}.`,
-    );
-  }
-  const filter = { name: { $startsWith: prefix } };
-  const search = new URLSearchParams({
-    pageSize: '100',
-    page: '1',
-    filter: JSON.stringify(filter),
-  });
-  const url = `${cleanUrl()}/api/collections:list?${search.toString()}`;
-  const data = await request<NocoBaseListResponse<NocoBaseCollection>>(url, { signal });
-  return (data.data ?? []).filter((c) => !c.hidden && c.template !== 'sql');
+  const all = await fetchCollections(signal);
+  if (!prefix) return all;
+  return all.filter((c) => c.name.startsWith(prefix));
 }
 
 export async function fetchOlikanassaCollections(signal?: AbortSignal): Promise<NocoBaseCollection[]> {
-  const all = await fetchCollections(signal);
-  const olikanassaNames = new Set<string>([
-    'projetos', 'usuarios_projetos', 'goals', 'liderancas', 'screenings',
-    'members', 'groups', 'Outcomes1', 'Project_Objectives', 'Outputs',
-    'Indicator_Catalog', 'indicator_measurements', 'districts', 'villages', 'health_posts',
-    'health_workers', 'food_security_support', 'activity_attendance', 'group_activities',
-    'training_courses', 'health_training_attendees', 'livelihood_training_attendees',
-    'communication_campaigns', 'safeguarding_events', 'climate_actions',
-    'despesas', 'diario_de_bordo', 'tarefas', 'report_settings',
-    'pspark_casos_de_lepra', 'conexao_sync', 'monthly_screening',
-  ]);
-  return all.filter((c) => olikanassaNames.has(c.name));
+  return fetchCollections(signal);
 }
 
 export async function fetchCollectionsForProject(
@@ -169,11 +122,11 @@ export async function fetchCollectionsForProject(
       const cols = await fetchCollectionsByPrefix(prefix, signal);
       results.push(...cols);
     } catch {
-      // prefix may not match any collections — skip
+      // skip
     }
   }
 
-  // Always include global/shared tables (projetos, usuarios_projetos, branding, etc.)
+  // Always include global/shared tables
   try {
     const all = await fetchCollections(signal);
     const existing = new Set(results.map((c) => c.name));
@@ -183,10 +136,9 @@ export async function fetchCollectionsForProject(
       }
     }
   } catch {
-    // ignore — return what we have
+    // ignore
   }
 
-  // For super_admin / admin: also include all other project tables for management
   if (includeMaster) {
     try {
       const all = await fetchCollections(signal);
@@ -197,11 +149,35 @@ export async function fetchCollectionsForProject(
         }
       }
     } catch {
-      // ignore — return what we have
+      // ignore
     }
   }
 
   return results;
+}
+
+// ─── Table schema (fields) ─────────────────────────────────────────────────
+
+export async function fetchFields(
+  collectionName: string,
+  signal?: AbortSignal,
+): Promise<NocoBaseField[]> {
+  const tableName = resolveTableName(collectionName);
+  const { data, error } = await supabase.rpc('get_table_columns', { table_name: tableName });
+  if (error) {
+    // Fallback: return empty — the UI will handle it
+    return [];
+  }
+  return (data ?? []).map((col: Record<string, string>) => ({
+    key: col.column_name,
+    name: col.column_name,
+    type: col.data_type,
+    interface: col.data_type,
+    title: col.column_name,
+    description: null,
+    collectionName,
+    allowNull: col.is_nullable === 'YES',
+  }));
 }
 
 export async function createCollection(
@@ -209,13 +185,8 @@ export async function createCollection(
   title: string,
   signal?: AbortSignal,
 ): Promise<NocoBaseCollection> {
-  const url = `${cleanUrl()}/api/collections:create`;
-  const result = await request<{ data: NocoBaseCollection }>(url, {
-    method: 'POST',
-    body: { name: tableName, title, inherits: false },
-    signal,
-  });
-  return result.data;
+  // In Supabase, table creation requires a migration — not supported at runtime
+  throw new NocoDBError('Criacao de tabelas nao suportada no Supabase. Use uma migracao.', 403);
 }
 
 export async function createField(
@@ -223,23 +194,14 @@ export async function createField(
   field: { name: string; interface: string; type: string; uiSchema?: Record<string, unknown> },
   signal?: AbortSignal,
 ): Promise<void> {
-  const url = `${cleanUrl()}/api/collections/${collectionName}/fields:create`;
-  await request(url, { method: 'POST', body: field, signal });
+  throw new NocoDBError('Criacao de campos nao suportada no Supabase. Use uma migracao.', 403);
 }
 
 export async function deleteCollection(collectionName: string, signal?: AbortSignal): Promise<void> {
-  const url = `${cleanUrl()}/api/collections:destroy?filterByTk=${encodeURIComponent(collectionName)}`;
-  await request(url, { method: 'DELETE', signal });
+  throw new NocoDBError('Remocao de tabelas nao suportada no Supabase. Use uma migracao.', 403);
 }
 
-export async function fetchFields(
-  collectionName: string,
-  signal?: AbortSignal,
-): Promise<NocoBaseField[]> {
-  const url = `${cleanUrl()}/api/collections/${collectionName}/fields:list`;
-  const data = await request<{ data: NocoBaseField[] }>(url, { signal });
-  return data.data ?? [];
-}
+// ─── Records CRUD ──────────────────────────────────────────────────────────
 
 export async function fetchRecords(
   collectionName: string,
@@ -251,18 +213,57 @@ export async function fetchRecords(
     signal?: AbortSignal;
   },
 ): Promise<NocoBaseRecordList> {
-  const search = new URLSearchParams({
-    page: String(params.page),
-    pageSize: String(params.pageSize),
-  });
-  if (params.appends && params.appends.length > 0) {
-    search.set('appends', params.appends.join(','));
+  const tableName = resolveTableName(collectionName);
+  const offset = (params.page - 1) * params.pageSize;
+
+  let query = supabase.from(tableName).select('*', { count: 'exact' });
+
+  // Apply simple equality filters
+  if (params.filter) {
+    for (const [key, value] of Object.entries(params.filter)) {
+      if (key === '$or' && Array.isArray(value)) {
+        // Use .or() with column=value pairs
+        const orParts = value.map((f: Record<string, unknown>) => {
+          return Object.entries(f).map(([k, v]) => `${k}.eq.${v}`).join(',');
+        }).join(',');
+        query = query.or(orParts);
+      } else if (key === '$and' && Array.isArray(value)) {
+        for (const cond of value as Record<string, unknown>[]) {
+          for (const [k, v] of Object.entries(cond)) {
+            if (k === '$or' && Array.isArray(v)) {
+              const orParts = v.map((f: Record<string, unknown>) =>
+                Object.entries(f).map(([fk, fv]) => `${fk}.eq.${fv}`).join(',')
+              ).join(',');
+              query = query.or(orParts);
+            } else {
+              query = query.eq(k, v);
+            }
+          }
+        }
+      } else if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        query = query.eq(key, value);
+      }
+    }
   }
-  if (params.filter && Object.keys(params.filter).length > 0) {
-    search.set('filter', JSON.stringify(params.filter));
-  }
-  const url = `${cleanUrl()}/api/${collectionName}:list?${search.toString()}`;
-  return request<NocoBaseRecordList>(url, { signal: params.signal });
+
+  query = query.range(offset, offset + params.pageSize - 1);
+
+  const { data, error, count } = await query;
+
+  if (error) throw new NocoDBError(`Erro ao ler registos: ${error.message}`, 0);
+
+  const total = count ?? 0;
+  const totalPage = Math.ceil(total / params.pageSize) || 1;
+
+  return {
+    data: (data ?? []) as Record<string, unknown>[],
+    meta: {
+      count: total,
+      page: params.page,
+      pageSize: params.pageSize,
+      totalPage,
+    },
+  };
 }
 
 export async function createRecord(
@@ -270,13 +271,10 @@ export async function createRecord(
   values: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  const url = `${cleanUrl()}/api/${collectionName}:create`;
-  const result = await request<{ data: Record<string, unknown> }>(url, {
-    method: 'POST',
-    body: values,
-    signal,
-  });
-  return result.data ?? {};
+  const tableName = resolveTableName(collectionName);
+  const { data, error } = await supabase.from(tableName).insert(values).select().single();
+  if (error) throw new NocoDBError(`Erro ao criar registo: ${error.message}`, 0);
+  return data as Record<string, unknown>;
 }
 
 export async function updateRecord(
@@ -285,13 +283,15 @@ export async function updateRecord(
   values: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  const url = `${cleanUrl()}/api/${collectionName}:update?filterByTk=${encodeURIComponent(String(recordId))}`;
-  const result = await request<{ data: unknown }>(url, {
-    method: 'PATCH',
-    body: values,
-    signal,
-  });
-  return (Array.isArray(result.data) ? result.data[0] : result.data) as Record<string, unknown>;
+  const tableName = resolveTableName(collectionName);
+  const { data, error } = await supabase
+    .from(tableName)
+    .update(values)
+    .eq('id', recordId)
+    .select()
+    .single();
+  if (error) throw new NocoDBError(`Erro ao atualizar registo: ${error.message}`, 0);
+  return data as Record<string, unknown>;
 }
 
 export async function deleteRecord(
@@ -299,9 +299,12 @@ export async function deleteRecord(
   recordId: string | number,
   signal?: AbortSignal,
 ): Promise<void> {
-  const url = `${cleanUrl()}/api/${collectionName}:destroy?filterByTk=${encodeURIComponent(String(recordId))}`;
-  await request<unknown>(url, { method: 'DELETE', signal });
+  const tableName = resolveTableName(collectionName);
+  const { error } = await supabase.from(tableName).delete().eq('id', recordId);
+  if (error) throw new NocoDBError(`Erro ao eliminar registo: ${error.message}`, 0);
 }
+
+// ─── Auth ──────────────────────────────────────────────────────────────────
 
 export interface NocoBaseRole {
   name: string;
@@ -321,187 +324,99 @@ export async function signIn(
   email: string,
   password: string,
 ): Promise<{ user: NocoBaseUser; token: string }> {
-  const url = `${cleanUrl()}/api/auth:signIn`;
-  let resp: Response;
-  try {
-    resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-  } catch {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
     throw new NocoDBError(
-      'Não foi possível conectar ao servidor NocoBase. Verifique a URL e a ligação de rede.',
-      0,
-      true,
+      `Erro de autenticacao: ${error.message}`,
+      error.status ?? 401,
     );
   }
-  if (!resp.ok) {
-    let detail = '';
-    try {
-      const body = await resp.json();
-      detail = body?.errors?.[0]?.message || body?.message || JSON.stringify(body);
-    } catch {
-      try { detail = await resp.text(); } catch { detail = ''; }
-    }
-    throw new NocoDBError(
-      `Erro da API do NocoBase (${resp.status}): ${detail || 'Email ou palavra-passe incorretos.'}`,
-      resp.status,
-    );
-  }
-  const data = await resp.json();
-  const token: string = data.data.token;
-  const userId: string | number = data.data.user.id;
 
-  // NocoBase signIn response does not include roles. Try multiple strategies:
-  // 1. auth:check with the user's own token (works for most users)
-  // 2. Direct user lookup with the user's token
-  // 3. Direct user lookup with the admin token
+  const session = data.session!;
+  const authUser = data.user!;
+
+  // Fetch project role from usuarios_projetos
   let roles: NocoBaseRole[] = [];
   try {
-    const checked = await checkAuth(token);
-    roles = checked.roles;
-  } catch {
-    // auth:check failed — try direct user lookup below
-  }
-  if (roles.length === 0) {
-    try {
-      roles = await fetchUserRoles(userId, token);
-    } catch {
-      // user token may lack permission — try admin token below
-    }
-  }
-  if (roles.length === 0 && NOCOBASE_TOKEN) {
-    try {
-      roles = await fetchUserRoles(userId, NOCOBASE_TOKEN);
-    } catch {
-      // admin token also failed — proceed with empty
-    }
-  }
-
-  // Also pull the project-level role from usuarios_projetos so we can map
-  // admin_projeto / editor_projeto / leitor_projeto.
-  try {
-    const projectRole = await fetchProjectRole(userId);
-    if (projectRole && !roles.some((r) => r.name === projectRole.name)) {
-      roles = [...roles, projectRole];
-    }
-  } catch {
-    // table may not exist or be empty — ignore
-  }
-
-  const user: NocoBaseUser = {
-    id: userId,
-    email: data.data.user.email,
-    nickname: data.data.user.nickname,
-    username: data.data.user.username,
-    roles,
-  };
-  return { user, token };
-}
-
-async function fetchUserRoles(
-  userId: string | number,
-  token: string,
-): Promise<NocoBaseRole[]> {
-  const url = `${cleanUrl()}/api/users/${encodeURIComponent(String(userId))}?appends=roles`;
-  const resp = await fetch(url, { headers: authHeaders(token) });
-  if (!resp.ok) throw new NocoDBError(`Erro ao obter roles (${resp.status})`, resp.status);
-  const data = await resp.json();
-  const userRoles = data.data?.roles ?? [];
-  return userRoles.map((r: Record<string, unknown>) => ({
-    name: r.name as string,
-    title: r.title as string | null,
-  }));
-}
-
-async function fetchProjectRole(userId: string | number): Promise<NocoBaseRole | null> {
-  // Try filtering by multiple possible field names for the user foreign key
-  const filter = {
-    $or: [
-      { usuario_fkey: userId },
-      { user_id: userId },
-      { usuario_id: userId },
-    ],
-  };
-  let data;
-  try {
-    data = await fetchRecords('usuarios_projetos', {
-      page: 1,
-      pageSize: 1,
-      filter,
-    });
-  } catch {
-    // If the $or filter fails, try without filter and search client-side
-    data = await fetchRecords('usuarios_projetos', { page: 1, pageSize: 100 });
-  }
-  const rows = data.data ?? [];
-  const row = rows.find((r) =>
-    r.usuario_fkey === userId || r.user_id === userId || r.usuario_id === userId
-  ) ?? rows[0];
-  if (!row) return null;
-  // Try multiple possible field names for the role column
-  const roleName = (row.role_no_projeto ?? row.role ?? row.tipo_role ?? row.role_projeto) as string | null;
-  if (!roleName) return null;
-  return { name: roleName, title: null };
-}
-
-export async function checkAuth(token: string): Promise<NocoBaseUser> {
-  const url = `${cleanUrl()}/api/auth:check`;
-  const resp = await fetch(url, { headers: authHeaders(token) });
-  if (!resp.ok) throw new NocoDBError('Sessão expirada.', resp.status);
-  const data = await resp.json();
-  const userId: string | number = data.data.id;
-
-  // auth:check returns roles for admin users but not always for non-admin ones,
-  // so fetch them explicitly with a fallback to the admin token.
-  let roles: NocoBaseRole[] = (data.data.roles ?? []).map((r: Record<string, unknown>) => ({
-    name: r.name as string,
-    title: r.title as string | null,
-  }));
-
-  if (roles.length === 0) {
-    try {
-      roles = await fetchUserRoles(userId, token);
-    } catch {
-      // ignore
-    }
-  }
-  if (roles.length === 0 && NOCOBASE_TOKEN) {
-    try {
-      roles = await fetchUserRoles(userId, NOCOBASE_TOKEN);
-    } catch {
-      // ignore
-    }
-  }
-
-  try {
-    const projectRole = await fetchProjectRole(userId);
-    if (projectRole && !roles.some((r) => r.name === projectRole.name)) {
-      roles = [...roles, projectRole];
+    const projectRole = await fetchProjectRole(authUser.id);
+    if (projectRole) {
+      roles = [projectRole];
     }
   } catch {
     // ignore
   }
 
+  // Check if user is admin via user metadata or default to editor
+  const userRole = (authUser.user_metadata?.role as string) ?? null;
+  if (userRole && !roles.some((r) => r.name === userRole)) {
+    roles = [...roles, { name: userRole, title: null }];
+  }
+  if (roles.length === 0) {
+    roles = [{ name: 'editor', title: null }];
+  }
+
+  const user: NocoBaseUser = {
+    id: authUser.id,
+    email: authUser.email ?? email,
+    nickname: (authUser.user_metadata?.nickname as string) ?? null,
+    username: (authUser.user_metadata?.username as string) ?? null,
+    roles,
+  };
+
+  return { user, token: session.access_token };
+}
+
+async function fetchProjectRole(userId: string | number): Promise<NocoBaseRole | null> {
+  const { data, error } = await supabase
+    .from('usuarios_projetos')
+    .select('role_no_projeto')
+    .eq('usuario_fkey', String(userId))
+    .limit(1);
+  if (error || !data || data.length === 0) return null;
+  const roleName = data[0].role_no_projeto as string | null;
+  if (!roleName) return null;
+  return { name: roleName, title: null };
+}
+
+export async function checkAuth(token: string): Promise<NocoBaseUser> {
+  const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
+  if (error || !authUser) throw new NocoDBError('Sessao expirada.', 401);
+
+  let roles: NocoBaseRole[] = [];
+  try {
+    const projectRole = await fetchProjectRole(authUser.id);
+    if (projectRole) roles = [projectRole];
+  } catch {
+    // ignore
+  }
+
+  const userRole = (authUser.user_metadata?.role as string) ?? null;
+  if (userRole && !roles.some((r) => r.name === userRole)) {
+    roles = [...roles, { name: userRole, title: null }];
+  }
+  if (roles.length === 0) {
+    roles = [{ name: 'editor', title: null }];
+  }
+
   return {
-    id: userId,
-    email: data.data.email,
-    nickname: data.data.nickname,
-    username: data.data.username,
+    id: authUser.id,
+    email: authUser.email ?? '',
+    nickname: (authUser.user_metadata?.nickname as string) ?? null,
+    username: (authUser.user_metadata?.username as string) ?? null,
     roles,
   };
 }
 
 export async function fetchUsers(signal?: AbortSignal): Promise<NocoBaseUser[]> {
-  const url = `${cleanUrl()}/api/users:list?pageSize=100&page=1&appends=roles`;
-  const data = await request<NocoBaseListResponse<NocoBaseUser>>(url, { signal });
-  return (data.data ?? []).map((u) => ({
+  const { data: { users }, error } = await supabase.auth.admin.listUsers();
+  if (error) throw new NocoDBError(`Erro ao listar utilizadores: ${error.message}`, 0);
+
+  return (users ?? []).map((u) => ({
     id: u.id,
-    email: u.email,
-    nickname: u.nickname,
-    username: u.username,
-    roles: u.roles ?? [],
+    email: u.email ?? '',
+    nickname: (u.user_metadata?.nickname as string) ?? null,
+    username: (u.user_metadata?.username as string) ?? null,
+    roles: [{ name: (u.user_metadata?.role as string) ?? 'editor', title: null }],
   }));
 }
 
@@ -515,28 +430,29 @@ export interface NocoBaseUserWithProject {
 }
 
 export async function fetchUsersWithProjects(signal?: AbortSignal): Promise<NocoBaseUserWithProject[]> {
-  const fields = 'id,nickname,email,roles,active_project_id';
-  const url = `${cleanUrl()}/api/users?fields=${encodeURIComponent(fields)}&appends=${encodeURIComponent('active_project')}&pageSize=200&page=1`;
-  const data = await request<NocoBaseListResponse<Record<string, unknown>>>(url, { signal });
-  return (data.data ?? []).map((row) => {
-    const proj = row.active_project as Record<string, unknown> | undefined;
-    return {
-      id: row.id as string | number,
-      nickname: (row.nickname as string | null) ?? null,
-      email: (row.email as string) ?? '',
-      roles: (row.roles as string | null) ?? null,
-      active_project_id: (row.active_project_id as string | number | null) ?? null,
-      active_project: proj && typeof proj === 'object'
-        ? { id: proj.id as string | number, nome: (proj.nome as string) ?? 'Projeto' }
-        : null,
-    };
-  });
+  const { data: { users }, error } = await supabase.auth.admin.listUsers();
+  if (error) throw new NocoDBError(`Erro ao listar utilizadores: ${error.message}`, 0);
+
+  return (users ?? []).map((u) => ({
+    id: u.id,
+    nickname: (u.user_metadata?.nickname as string) ?? null,
+    email: u.email ?? '',
+    roles: (u.user_metadata?.role as string) ?? null,
+    active_project_id: (u.user_metadata?.active_project_id as string | number) ?? null,
+    active_project: null,
+  }));
 }
 
 export async function fetchRoles(signal?: AbortSignal): Promise<NocoBaseRole[]> {
-  const url = `${cleanUrl()}/api/roles:list?pageSize=100&page=1`;
-  const data = await request<NocoBaseListResponse<NocoBaseRole>>(url, { signal });
-  return (data.data ?? []).filter((r) => !r.hidden);
+  return [
+    { name: 'super_admin', title: 'Super Administrador' },
+    { name: 'admin', title: 'Administrador' },
+    { name: 'editor', title: 'Editor' },
+    { name: 'leitor', title: 'Leitor' },
+    { name: 'admin_projeto', title: 'Admin de Projeto' },
+    { name: 'editor_projeto', title: 'Editor de Projeto' },
+    { name: 'leitor_projeto', title: 'Leitor de Projeto' },
+  ];
 }
 
 export async function setUserRole(
@@ -544,45 +460,36 @@ export async function setUserRole(
   roleName: string,
   token?: string | null,
 ): Promise<void> {
-  const url = `${cleanUrl()}/api/users/${encodeURIComponent(String(userId))}/roles:set`;
-  await request(url, { method: 'POST', body: { roleName }, token, });
+  const { error } = await supabase.auth.admin.updateUserById(String(userId), {
+    user_metadata: { role: roleName },
+  });
+  if (error) throw new NocoDBError(`Erro ao definir role: ${error.message}`, 0);
 }
+
+// ─── Role permissions (legacy stubs) ───────────────────────────────────────
 
 export interface NocoBaseRolePermission {
   role_name: string;
-  resources: Record<string, {
-    actions: string[];
-    scope?: string;
-  }>;
+  resources: Record<string, { actions: string[]; scope?: string }>;
 }
 
 export async function fetchRolePermissions(
   roleName?: string,
   signal?: AbortSignal,
 ): Promise<NocoBaseRolePermission[]> {
-  const search = new URLSearchParams({ pageSize: '100', page: '1' });
-  if (roleName) search.set('filter', JSON.stringify({ role_name: roleName }));
-  const url = `${cleanUrl()}/api/rolePermissions:list?${search.toString()}`;
-  const data = await request<NocoBaseListResponse<NocoBaseRolePermission>>(url, { signal });
-  return data.data ?? [];
+  return [];
 }
 
 export async function fetchRoleWithPermissions(
   roleName: string,
   signal?: AbortSignal,
 ): Promise<NocoBaseRole & { permissions?: NocoBaseRolePermission }> {
-  const search = new URLSearchParams({ pageSize: '1', page: '1', filter: JSON.stringify({ name: roleName }) });
-  const url = `${cleanUrl()}/api/roles:list?${search.toString()}`;
-  const data = await request<NocoBaseListResponse<NocoBaseRole>>(url, { signal });
-  const role = (data.data ?? [])[0];
-  if (!role) throw new NocoDBError(`Role "${roleName}" not found.`, 404);
-  let permissions: NocoBaseRolePermission | undefined;
-  try {
-    const perms = await fetchRolePermissions(roleName, signal);
-    permissions = perms[0];
-  } catch { /* non-critical */ }
-  return { ...role, permissions };
+  const role = (await fetchRoles(signal)).find((r) => r.name === roleName);
+  if (!role) throw new NocoDBError(`Role "${roleName}" nao encontrada.`, 404);
+  return { ...role, permissions: undefined };
 }
+
+// ─── Branding ──────────────────────────────────────────────────────────────
 
 export interface NocoBaseAttachment {
   id: string | number;
@@ -601,18 +508,19 @@ export interface BrandingRecord {
 }
 
 export async function fetchBrandingSettings(signal?: AbortSignal): Promise<BrandingRecord | null> {
-  if (!isConfigured()) return null;
   try {
-    const url = `${cleanUrl()}/api/branding_settings:list?pageSize=1&page=1&appends=logo`;
-    const data = await request<NocoBaseRecordList>(url, { signal });
-    const row = data.data?.[0];
-    if (!row) return null;
+    const { data, error } = await supabase
+      .from('branding_settings')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+    if (error || !data) return null;
     return {
-      id: row.id as string | number,
-      logo: (row.logo as NocoBaseAttachment[] | null) ?? null,
-      login_title: (row.login_title as string) ?? '',
-      login_subtitle: (row.login_subtitle as string) ?? '',
-      login_button_text: (row.login_button_text as string) ?? '',
+      id: data.id,
+      logo: data.logo ? [{ id: '', url: data.logo, filename: null, mimetype: null, size: null }] : null,
+      login_title: data.login_title ?? '',
+      login_subtitle: data.login_subtitle ?? '',
+      login_button_text: data.login_button_text ?? '',
     };
   } catch {
     return null;
@@ -620,61 +528,61 @@ export async function fetchBrandingSettings(signal?: AbortSignal): Promise<Brand
 }
 
 export async function uploadAttachment(file: File, signal?: AbortSignal): Promise<NocoBaseAttachment> {
-  if (!isConfigured()) throw new NocoDBError('NocoBase não configurado.', 0);
-  const formData = new FormData();
-  formData.append('file', file);
-  const url = `${cleanUrl()}/api/attachments:create`;
-  const init: RequestInit = {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${NOCOBASE_TOKEN}` },
-    body: formData,
-    signal,
+  const fileName = `logos/${Date.now()}-${file.name}`;
+  const { error: uploadErr } = await supabase.storage
+    .from('attachments')
+    .upload(fileName, file);
+  if (uploadErr) throw new NocoDBError(`Erro ao enviar ficheiro: ${uploadErr.message}`, 0);
+
+  const { data: urlData } = supabase.storage
+    .from('attachments')
+    .getPublicUrl(fileName);
+
+  return {
+    id: fileName,
+    url: urlData.publicUrl,
+    filename: file.name,
+    mimetype: file.type,
+    size: file.size,
   };
-  let resp: Response;
-  try {
-    resp = await fetch(url, init);
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') throw err;
-    throw new NocoDBError('Não foi possível enviar o ficheiro. Verifique a ligação.', 0, true);
-  }
-  if (!resp.ok) {
-    let detail = '';
-    try { detail = (await resp.json())?.message ?? ''; } catch { try { detail = await resp.text(); } catch { detail = ''; } }
-    throw new NocoDBError(`Erro ao enviar ficheiro${detail ? `: ${detail}` : ''}`, resp.status);
-  }
-  const data = await resp.json();
-  return data.data as NocoBaseAttachment;
 }
 
 export async function saveBrandingSettings(
   values: { logo: NocoBaseAttachment[] | null; login_title: string; login_subtitle: string; login_button_text: string },
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!isConfigured()) throw new NocoDBError('NocoBase não configurado.', 0);
-  const existing = await fetchBrandingSettings(signal);
-  if (existing) {
-    const updateUrl = `${cleanUrl()}/api/branding_settings:update?filterByTk=${encodeURIComponent(String(existing.id))}`;
-    await request(updateUrl, { method: 'PATCH', body: values, signal });
-  } else {
-    await createRecord('branding_settings', values, signal);
-  }
+  const logoUrl = values.logo?.[0]?.url ?? null;
+  const { error } = await supabase
+    .from('branding_settings')
+    .upsert({
+      id: 1,
+      logo: logoUrl,
+      login_title: values.login_title,
+      login_subtitle: values.login_subtitle,
+      login_button_text: values.login_button_text,
+      updated_at: new Date().toISOString(),
+    });
+  if (error) throw new NocoDBError(`Erro ao guardar branding: ${error.message}`, 0);
 }
 
 export async function resetBrandingSettings(signal?: AbortSignal): Promise<void> {
-  if (!isConfigured()) return;
   try {
-    const existing = await fetchBrandingSettings(signal);
-    if (!existing) return;
-    const url = `${cleanUrl()}/api/branding_settings:update?filterByTk=${encodeURIComponent(String(existing.id))}`;
-    await request(url, {
-      method: 'PATCH',
-      body: { logo: null, login_title: '', login_subtitle: '', login_button_text: '' },
-      signal,
-    });
+    await supabase
+      .from('branding_settings')
+      .update({
+        logo: null,
+        login_title: '',
+        login_subtitle: '',
+        login_button_text: '',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', 1);
   } catch {
-    // ignore — reset is best-effort
+    // ignore
   }
 }
+
+// ─── Visibility settings ───────────────────────────────────────────────────
 
 export interface VisibilitySettingRow {
   id?: string | number;
@@ -684,58 +592,19 @@ export interface VisibilitySettingRow {
   role: string | null;
 }
 
-let roleColumnEnsured = false;
-
-async function ensureRoleColumn(signal?: AbortSignal): Promise<void> {
-  if (roleColumnEnsured) return;
-  try {
-    await createField('visibility_settings', {
-      name: 'role',
-      interface: 'select',
-      type: 'string',
-      uiSchema: {
-        'x-component': 'Select',
-        'x-component-props': {
-          options: [
-            { label: 'super_admin', value: 'super_admin' },
-            { label: 'admin', value: 'admin' },
-            { label: 'editor', value: 'editor' },
-            { label: 'leitor', value: 'leitor' },
-            { label: 'admin_projeto', value: 'admin_projeto' },
-            { label: 'editor_projeto', value: 'editor_projeto' },
-            { label: 'leitor_projeto', value: 'leitor_projeto' },
-          ],
-        },
-      },
-    }, signal);
-  } catch {
-    // Column may already exist — that's fine
-  }
-  roleColumnEnsured = true;
-}
-
 export async function fetchVisibilitySettings(
   role?: string | null,
   signal?: AbortSignal,
 ): Promise<VisibilitySettingRow[]> {
-  if (!isConfigured()) return [];
-  await ensureRoleColumn(signal);
   try {
-    const filter: Record<string, unknown> = {};
+    let query = supabase.from('visibility_settings').select('*');
     if (role) {
-      filter.$or = [
-        { role: role },
-        { role: null },
-      ];
+      query = query.or(`role.eq.${role},role.is.null`);
     }
-    const data = await fetchRecords('visibility_settings', {
-      page: 1,
-      pageSize: 500,
-      filter: Object.keys(filter).length > 0 ? filter : undefined,
-      signal,
-    });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
+    const { data, error } = await query;
+    if (error) return [];
+    return (data ?? []).map((r) => ({
+      id: r.id,
       collection_name: r.collection_name as string,
       field_name: (r.field_name as string | null) ?? null,
       visible: r.visible as boolean,
@@ -753,43 +622,44 @@ export async function upsertVisibilitySetting(
   role?: string | null,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!isConfigured()) return;
-  await ensureRoleColumn(signal);
-  const filter: Record<string, unknown> = {
-    collection_name: collectionName,
-    field_name: fieldName,
-  };
-  if (role) {
-    filter.$or = [
-      { role: role },
-      { role: null },
-    ];
-  } else {
-    filter.role = null;
-  }
-  const existing = await fetchRecords('visibility_settings', {
-    page: 1,
-    pageSize: 1,
-    filter,
-    signal,
-  });
-  const row = existing.data?.[0];
-  if (row) {
-    const updateUrl = `${cleanUrl()}/api/visibility_settings:update?filterByTk=${encodeURIComponent(String(row.id))}`;
-    await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
-  } else {
-    await createRecord('visibility_settings', {
-      collection_name: collectionName,
-      field_name: fieldName,
-      visible,
-      role: role ?? null,
-    }, signal);
+  try {
+    let query = supabase
+      .from('visibility_settings')
+      .select('id')
+      .eq('collection_name', collectionName);
+    if (fieldName) {
+      query = query.eq('field_name', fieldName);
+    } else {
+      query = query.is('field_name', null);
+    }
+    if (role) {
+      query = query.eq('role', role);
+    } else {
+      query = query.is('role', null);
+    }
+    const { data: existing } = await query.maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('visibility_settings')
+        .update({ visible, updated_at: new Date().toISOString() })
+        .eq('id', existing.id);
+    } else {
+      await supabase.from('visibility_settings').insert({
+        collection_name: collectionName,
+        field_name: fieldName,
+        visible,
+        role: role ?? null,
+      });
+    }
+  } catch {
+    // ignore
   }
 }
 
 export { isConfigured, getConfigStatus };
 
-// ─── Table permissions (stored in NocoBase) ──────────────────────────────
+// ─── Table permissions (stored in Supabase) ────────────────────────────────
 
 export type TablePermission = 'view' | 'create' | 'edit' | 'delete';
 
@@ -804,8 +674,6 @@ export interface TablePermissionRow {
   can_edit: boolean;
   can_delete: boolean;
 }
-
-// ─── Table permissions (stored in Supabase) ──────────────────────────────
 
 export async function fetchTablePermissions(
   roleName?: string | null,
@@ -919,18 +787,15 @@ export async function fetchProjectCredentials(
   userToken?: string | null,
   signal?: AbortSignal,
 ): Promise<ProjectCredentials> {
-  const search = new URLSearchParams({
-    pageSize: '1',
-    page: '1',
-    filter: JSON.stringify({ id: projectId }),
-  });
-  const url = `${cleanUrl()}/api/projetos:list?${search.toString()}`;
-  const data = await request<NocoBaseRecordList>(url, { signal, token: userToken });
-  const row = data.data?.[0];
-  if (!row) return { baseId: null, apiToken: null, projectRole: null };
+  const { data, error } = await supabase
+    .from('projetos')
+    .select('base_id, api_token')
+    .eq('id', String(projectId))
+    .maybeSingle();
+  if (error || !data) return { baseId: null, apiToken: null, projectRole: null };
   return {
-    baseId: (row.base_id ?? row.baseId ?? row.project_id ?? row.nocoBaseId) as string | null ?? null,
-    apiToken: (row.api_token ?? row.apiToken ?? row.token) as string | null ?? null,
+    baseId: data.base_id ?? null,
+    apiToken: data.api_token ?? null,
     projectRole: null,
   };
 }
@@ -940,9 +805,16 @@ export async function fetchUserWithProjects(
   token?: string | null,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown> | null> {
-  const url = `${cleanUrl()}/api/users/${encodeURIComponent(String(userId))}?appends=${encodeURIComponent('usuarios_projetos.projeto_id')}`;
-  const data = await request<{ data: Record<string, unknown> }>(url, { token, signal });
-  return data.data ?? null;
+  const { data, error } = await supabase
+    .from('usuarios_projetos')
+    .select(`
+      *,
+      projeto_id:projetos(*)
+    `)
+    .eq('usuario_fkey', String(userId));
+  if (error) return null;
+  if (!data || data.length === 0) return { usuarios_projetos: [] };
+  return { usuarios_projetos: data };
 }
 
 export async function validateProjectAccess(
@@ -950,45 +822,14 @@ export async function validateProjectAccess(
   projectId: string | number,
   signal?: AbortSignal,
 ): Promise<string | null> {
-  const filter = {
-    $and: [
-      {
-        $or: [
-          { usuario_fkey: userId },
-          { user_id: userId },
-          { usuario_id: userId },
-        ],
-      },
-      {
-        $or: [
-          { projeto_id: projectId },
-          { project_id: projectId },
-          { projeto_fkey: projectId },
-        ],
-      },
-    ],
-  };
-  let data;
-  try {
-    data = await fetchRecords('usuarios_projetos', {
-      page: 1,
-      pageSize: 1,
-      filter,
-      signal,
-    });
-  } catch {
-    data = await fetchRecords('usuarios_projetos', { page: 1, pageSize: 100, signal });
-  }
-  const rows = data.data ?? [];
-  const row = rows.find((r) =>
-    (r.usuario_fkey === userId || r.user_id === userId || r.usuario_id === userId) &&
-    (r.projeto_id === projectId || r.project_id === projectId || r.projeto_fkey === projectId)
-  ) ?? rows.find((r) =>
-    r.usuario_fkey === userId || r.user_id === userId || r.usuario_id === userId
-  );
-  if (!row) return null;
-  const role = (row.role_no_projeto ?? row.role ?? row.tipo_role ?? row.role_projeto) as string | null;
-  return role;
+  const { data, error } = await supabase
+    .from('usuarios_projetos')
+    .select('role_no_projeto')
+    .eq('usuario_fkey', String(userId))
+    .eq('projeto_id', String(projectId))
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data.role_no_projeto as string) ?? null;
 }
 
 export function canCreate(role: string | null): boolean {
@@ -1029,49 +870,42 @@ export interface ProjectInfo {
 }
 
 export async function fetchAllProjects(signal?: AbortSignal): Promise<ProjectInfo[]> {
-  const data = await fetchRecords('projetos', { page: 1, pageSize: 200, signal });
-  return (data.data ?? []).map((r) => ({
-    id: r.id as string | number,
+  const { data, error } = await supabase.from('projetos').select('*');
+  if (error) return [];
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
     nome: r.nome as string,
-    status: (r.status as string | null) ?? null,
-    table_prefix: (r.table_prefix as string | null) ?? null,
+    status: (r.status as string) ?? null,
+    table_prefix: (r.table_prefix as string) ?? null,
   }));
 }
 
 export async function fetchAllUserProjectAssignments(signal?: AbortSignal): Promise<UserProjectAssignment[]> {
-  try {
-    const data = await fetchRecords('usuarios_projetos', {
-      page: 1,
-      pageSize: 500,
-      appends: ['usuario_fkey', 'projeto_id'],
-      signal,
-    });
-    return (data.data ?? []).map((r) => {
-      const user = r.usuario_fkey as Record<string, unknown> | undefined;
-      const proj = r.projeto_id as Record<string, unknown> | undefined;
-      return {
-        id: r.id as string | number,
-        userId: (user?.id ?? r.user_id ?? r.usuario_id) as string | number,
-        userEmail: (user?.email as string) ?? '',
-        userNickname: (user?.nickname as string | null) ?? null,
-        projectId: (proj?.id ?? r.project_id ?? r.projeto_fkey) as string | number,
-        projectName: (proj?.nome as string) ?? 'Projeto',
-        role: (r.role_no_projeto ?? r.role ?? r.tipo_role ?? r.role_projeto) as string | null,
-      };
-    });
-  } catch {
-    // Fallback: fetch without appends
-    const data = await fetchRecords('usuarios_projetos', { page: 1, pageSize: 500, signal });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
-      userId: (r.usuario_fkey ?? r.user_id ?? r.usuario_id) as string | number,
+  const { data, error } = await supabase
+    .from('usuarios_projetos')
+    .select(`
+      id,
+      usuario_fkey,
+      role_no_projeto,
+      projetos:projeto_id(id, nome)
+    `);
+  if (error) return [];
+
+  // Fetch user emails from auth
+  const userIds = [...new Set((data ?? []).map((r) => String(r.usuario_fkey)))];
+
+  return (data ?? []).map((r) => {
+    const proj = r.projetos as unknown as Record<string, unknown> | null;
+    return {
+      id: r.id as string,
+      userId: r.usuario_fkey as string,
       userEmail: '',
       userNickname: null,
-      projectId: (r.projeto_id ?? r.project_id ?? r.projeto_fkey) as string | number,
-      projectName: '',
-      role: (r.role_no_projeto ?? r.role ?? r.tipo_role ?? r.role_projeto) as string | null,
-    }));
-  }
+      projectId: (proj?.id ?? '') as string,
+      projectName: (proj?.nome as string) ?? 'Projeto',
+      role: (r.role_no_projeto as string) ?? null,
+    };
+  });
 }
 
 export async function createUserProjectAssignment(
@@ -1080,11 +914,17 @@ export async function createUserProjectAssignment(
   role: string,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  return createRecord('usuarios_projetos', {
-    usuario_fkey: userId,
-    projeto_id: projectId,
-    role_no_projeto: role,
-  }, signal);
+  const { data, error } = await supabase
+    .from('usuarios_projetos')
+    .insert({
+      usuario_fkey: String(userId),
+      projeto_id: String(projectId),
+      role_no_projeto: role,
+    })
+    .select()
+    .single();
+  if (error) throw new NocoDBError(`Erro ao criar atribuicao: ${error.message}`, 0);
+  return data as Record<string, unknown>;
 }
 
 export async function updateUserProjectAssignmentRole(
@@ -1092,17 +932,25 @@ export async function updateUserProjectAssignmentRole(
   role: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  await updateRecord('usuarios_projetos', assignmentId, { role_no_projeto: role }, signal);
+  const { error } = await supabase
+    .from('usuarios_projetos')
+    .update({ role_no_projeto: role, updated_at: new Date().toISOString() })
+    .eq('id', String(assignmentId));
+  if (error) throw new NocoDBError(`Erro ao atualizar atribuicao: ${error.message}`, 0);
 }
 
 export async function deleteUserProjectAssignment(
   assignmentId: string | number,
   signal?: AbortSignal,
 ): Promise<void> {
-  await deleteRecord('usuarios_projetos', assignmentId, signal);
+  const { error } = await supabase
+    .from('usuarios_projetos')
+    .delete()
+    .eq('id', String(assignmentId));
+  if (error) throw new NocoDBError(`Erro ao eliminar atribuicao: ${error.message}`, 0);
 }
 
-// ─── Project table visibility (stored in NocoBase) ────────────────────────
+// ─── Project table visibility (stored in Supabase) ─────────────────────────
 
 export type VisibilityTarget = 'user' | 'role';
 
@@ -1115,100 +963,8 @@ export interface ProjectTableVisibilityRow {
   visible: boolean;
 }
 
-let ptvTableEnsured = false;
-
-async function recreatePtvTable(signal?: AbortSignal): Promise<void> {
-  try { await deleteCollection('project_table_visibility', signal); } catch { /* may not exist */ }
-  await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Utilizador', signal);
-  await createField('project_table_visibility', {
-    name: 'user_id',
-    interface: 'input',
-    type: 'string',
-  }, signal);
-  await createField('project_table_visibility', {
-    name: 'role_name',
-    interface: 'input',
-    type: 'string',
-  }, signal);
-  await createField('project_table_visibility', {
-    name: 'project_id',
-    interface: 'input',
-    type: 'string',
-  }, signal);
-  await createField('project_table_visibility', {
-    name: 'collection_name',
-    interface: 'input',
-    type: 'string',
-  }, signal);
-  await createField('project_table_visibility', {
-    name: 'visible',
-    interface: 'switch',
-    type: 'boolean',
-  }, signal);
-}
-
 export async function ensureProjectTableVisibilityTable(signal?: AbortSignal): Promise<void> {
-  if (!isConfigured() || ptvTableEnsured) return;
-  try {
-    const fields = await fetchFields('project_table_visibility', signal);
-    const projectIdField = fields.find((f) => f.name === 'project_id');
-    const userIdField = fields.find((f) => f.name === 'user_id');
-    const roleNameField = fields.find((f) => f.name === 'role_name');
-    if (projectIdField && projectIdField.type === 'integer') {
-      await recreatePtvTable(signal);
-    } else {
-      if (!userIdField) {
-        try {
-          await createField('project_table_visibility', {
-            name: 'user_id',
-            interface: 'input',
-            type: 'string',
-          }, signal);
-        } catch { /* field may already exist */ }
-      }
-      if (!roleNameField) {
-        try {
-          await createField('project_table_visibility', {
-            name: 'role_name',
-            interface: 'input',
-            type: 'string',
-          }, signal);
-        } catch { /* field may already exist */ }
-      }
-    }
-  } catch {
-    try {
-      await createCollection('project_table_visibility', 'Visibilidade de Tabelas por Utilizador', signal);
-      await createField('project_table_visibility', {
-        name: 'user_id',
-        interface: 'input',
-        type: 'string',
-      }, signal);
-      await createField('project_table_visibility', {
-        name: 'role_name',
-        interface: 'input',
-        type: 'string',
-      }, signal);
-      await createField('project_table_visibility', {
-        name: 'project_id',
-        interface: 'input',
-        type: 'string',
-      }, signal);
-      await createField('project_table_visibility', {
-        name: 'collection_name',
-        interface: 'input',
-        type: 'string',
-      }, signal);
-      await createField('project_table_visibility', {
-        name: 'visible',
-        interface: 'switch',
-        type: 'boolean',
-      }, signal);
-    } catch {
-      /* table creation failed — fetches will return empty */
-    }
-  }
-  ptvTableEnsured = true;
+  // Table already exists in Supabase — no-op
 }
 
 export async function fetchProjectTableVisibility(
@@ -1217,23 +973,20 @@ export async function fetchProjectTableVisibility(
   roleName?: string | null,
   signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
-  if (!isConfigured()) return [];
-  await ensureProjectTableVisibilityTable(signal);
   try {
-    const filter: Record<string, unknown> = { project_id: String(projectId) };
-    if (userId != null) filter.user_id = String(userId);
-    if (roleName != null && roleName !== '') filter.role_name = roleName;
-    const data = await fetchRecords('project_table_visibility', {
-      page: 1,
-      pageSize: 500,
-      filter,
-      signal,
-    });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
-      user_id: (r.user_id as string | number | null) ?? null,
+    let query = supabase
+      .from('project_table_visibility')
+      .select('*')
+      .eq('project_id', String(projectId));
+    if (userId != null) query = query.eq('user_id', String(userId));
+    if (roleName != null && roleName !== '') query = query.eq('role_name', roleName);
+    const { data, error } = await query;
+    if (error) return [];
+    return (data ?? []).map((r) => ({
+      id: r.id as string,
+      user_id: (r.user_id as string | null) ?? null,
       role_name: (r.role_name as string | null) ?? null,
-      project_id: r.project_id as string | number,
+      project_id: r.project_id as string,
       collection_name: r.collection_name as string,
       visible: r.visible as boolean,
     }));
@@ -1250,51 +1003,56 @@ export async function upsertProjectTableVisibility(
   roleName?: string | null,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!isConfigured()) return;
-  await ensureProjectTableVisibilityTable(signal);
-  const pid = String(projectId);
-  const uid = userId != null ? String(userId) : null;
-  const rname = roleName ?? null;
-  const filter: Record<string, unknown> = { project_id: pid, collection_name: collectionName };
-  if (uid != null) filter.user_id = uid;
-  if (rname != null && rname !== '') filter.role_name = rname;
-  const existing = await fetchRecords('project_table_visibility', {
-    page: 1,
-    pageSize: 1,
-    filter,
-    signal,
-  });
-  const row = existing.data?.[0];
-  if (row) {
-    const updateUrl = `${cleanUrl()}/api/project_table_visibility:update?filterByTk=${encodeURIComponent(String(row.id))}`;
-    await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
-  } else {
-    await createRecord('project_table_visibility', {
-      user_id: uid,
-      role_name: rname,
-      project_id: pid,
-      collection_name: collectionName,
-      visible,
-    }, signal);
+  try {
+    let query = supabase
+      .from('project_table_visibility')
+      .select('id')
+      .eq('project_id', String(projectId))
+      .eq('collection_name', collectionName);
+    if (userId != null) {
+      query = query.eq('user_id', String(userId));
+    } else {
+      query = query.is('user_id', null);
+    }
+    if (roleName != null && roleName !== '') {
+      query = query.eq('role_name', roleName);
+    } else {
+      query = query.is('role_name', null);
+    }
+    const { data: existing } = await query.maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('project_table_visibility')
+        .update({ visible })
+        .eq('id', existing.id);
+    } else {
+      await supabase.from('project_table_visibility').insert({
+        user_id: userId != null ? String(userId) : null,
+        role_name: roleName ?? null,
+        project_id: String(projectId),
+        collection_name: collectionName,
+        visible,
+      });
+    }
+  } catch {
+    // ignore
   }
 }
 
 export async function fetchAllProjectTableVisibility(
   signal?: AbortSignal,
 ): Promise<ProjectTableVisibilityRow[]> {
-  if (!isConfigured()) return [];
-  await ensureProjectTableVisibilityTable(signal);
   try {
-    const data = await fetchRecords('project_table_visibility', {
-      page: 1,
-      pageSize: 1000,
-      signal,
-    });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
-      user_id: (r.user_id as string | number | null) ?? null,
+    const { data, error } = await supabase
+      .from('project_table_visibility')
+      .select('*');
+    if (error) return [];
+    return (data ?? []).map((r) => ({
+      id: r.id as string,
+      user_id: (r.user_id as string | null) ?? null,
       role_name: (r.role_name as string | null) ?? null,
-      project_id: r.project_id as string | number,
+      project_id: r.project_id as string,
       collection_name: r.collection_name as string,
       visible: r.visible as boolean,
     }));
@@ -1303,7 +1061,7 @@ export async function fetchAllProjectTableVisibility(
   }
 }
 
-// ─── Project visibility per user (stored in NocoBase) ───────────────────
+// ─── Project visibility per user (stored in Supabase) ─────────────────────
 
 export interface ProjectVisibilityRow {
   id?: string | number;
@@ -1312,58 +1070,24 @@ export interface ProjectVisibilityRow {
   visible: boolean;
 }
 
-let pvTableEnsured = false;
-
 export async function ensureProjectVisibilityTable(signal?: AbortSignal): Promise<void> {
-  if (!isConfigured() || pvTableEnsured) return;
-  try {
-    try {
-      await fetchFields('project_visibility', signal);
-    } catch {
-      try {
-        await createCollection('project_visibility', 'Visibilidade de Projetos por Utilizador', signal);
-        await createField('project_visibility', {
-          name: 'user_id',
-          interface: 'input',
-          type: 'string',
-        }, signal);
-        await createField('project_visibility', {
-          name: 'project_id',
-          interface: 'input',
-          type: 'string',
-        }, signal);
-        await createField('project_visibility', {
-          name: 'visible',
-          interface: 'switch',
-          type: 'boolean',
-        }, signal);
-      } catch {
-        /* table creation may fail — fetches will return empty */
-      }
-    }
-  } catch {
-    /* never let table ensure throw */
-  }
-  pvTableEnsured = true;
+  // Table already exists — no-op
 }
 
 export async function fetchProjectVisibilityForUser(
   userId: string | number,
   signal?: AbortSignal,
 ): Promise<ProjectVisibilityRow[]> {
-  if (!isConfigured()) return [];
-  await ensureProjectVisibilityTable(signal);
   try {
-    const data = await fetchRecords('project_visibility', {
-      page: 1,
-      pageSize: 500,
-      filter: { user_id: String(userId) },
-      signal,
-    });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
-      user_id: r.user_id as string | number,
-      project_id: r.project_id as string | number,
+    const { data, error } = await supabase
+      .from('project_visibility')
+      .select('*')
+      .eq('user_id', String(userId));
+    if (error) return [];
+    return (data ?? []).map((r) => ({
+      id: r.id as string,
+      user_id: r.user_id as string,
+      project_id: r.project_id as string,
       visible: r.visible as boolean,
     }));
   } catch {
@@ -1374,18 +1098,15 @@ export async function fetchProjectVisibilityForUser(
 export async function fetchAllProjectVisibility(
   signal?: AbortSignal,
 ): Promise<ProjectVisibilityRow[]> {
-  if (!isConfigured()) return [];
-  await ensureProjectVisibilityTable(signal);
   try {
-    const data = await fetchRecords('project_visibility', {
-      page: 1,
-      pageSize: 1000,
-      signal,
-    });
-    return (data.data ?? []).map((r) => ({
-      id: r.id as string | number,
-      user_id: r.user_id as string | number,
-      project_id: r.project_id as string | number,
+    const { data, error } = await supabase
+      .from('project_visibility')
+      .select('*');
+    if (error) return [];
+    return (data ?? []).map((r) => ({
+      id: r.id as string,
+      user_id: r.user_id as string,
+      project_id: r.project_id as string,
       visible: r.visible as boolean,
     }));
   } catch {
@@ -1399,29 +1120,27 @@ export async function upsertProjectVisibility(
   visible: boolean,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!isConfigured()) return;
-  await ensureProjectVisibilityTable(signal);
-  const uid = String(userId);
-  const pid = String(projectId);
   try {
-    const existing = await fetchRecords('project_visibility', {
-      page: 1,
-      pageSize: 1,
-      filter: { user_id: uid, project_id: pid },
-      signal,
-    });
-    const row = existing.data?.[0];
-    if (row) {
-      const updateUrl = `${cleanUrl()}/api/project_visibility:update?filterByTk=${encodeURIComponent(String(row.id))}`;
-      await request(updateUrl, { method: 'PATCH', body: { visible }, signal });
+    const { data: existing } = await supabase
+      .from('project_visibility')
+      .select('id')
+      .eq('user_id', String(userId))
+      .eq('project_id', String(projectId))
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from('project_visibility')
+        .update({ visible })
+        .eq('id', existing.id);
     } else {
-      await createRecord('project_visibility', {
-        user_id: uid,
-        project_id: pid,
+      await supabase.from('project_visibility').insert({
+        user_id: String(userId),
+        project_id: String(projectId),
         visible,
-      }, signal);
+      });
     }
   } catch {
-    /* table may not exist — ignore */
+    // ignore
   }
 }

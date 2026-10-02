@@ -75,9 +75,9 @@ export default function Sidebar({
   // Sync the visibility context to the current user's real NocoBase role names
   // so that role-specific visibility settings are applied in the sidebar.
   useEffect(() => {
-    const realRoleNames = (user?.roles ?? []).map((r) => r.name);
+    const realRoleNames = user?.role ? [user.role] : [];
     setActiveRoles(realRoleNames);
-  }, [user?.roles, setActiveRoles]);
+  }, [user?.role, setActiveRoles]);
 
   // Dynamic prefix-based filtering:
   // - super_admin / admin: see ALL collections (no prefix filter)
