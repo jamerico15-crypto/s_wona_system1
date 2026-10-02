@@ -18,12 +18,7 @@ export default function ConfigBanner({ missing }: ConfigBannerProps) {
         </p>
         <div className="mt-4 space-y-2">
           {missing.map((v) => (
-            <div
-              key={v}
-              className="rounded-lg border border-amber-200 bg-white px-4 py-2 text-left font-mono text-sm text-amber-900"
-            >
-              {v}
-            </div>
+            <div key={v} className="rounded-lg border border-amber-200 bg-white px-4 py-2 text-left font-mono text-sm text-amber-900">{v}</div>
           ))}
         </div>
         <p className="mt-4 text-xs text-amber-700">
@@ -31,12 +26,7 @@ export default function ConfigBanner({ missing }: ConfigBannerProps) {
           <code className="rounded bg-amber-100 px-1 py-0.5 font-mono">.env</code> e preencha os valores.
           Pode obter o token nas definições de API do servidor.
         </p>
-        <a
-          href="https://supabase.com/docs"
-          target="_blank"
-          rel="noreferrer"
-          className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-amber-700 hover:text-amber-900"
-        >
+        <a href="https://supabase.com/docs" target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-amber-700 hover:text-amber-900">
           Documentação do Supabase
           <ExternalLink className="h-4 w-4" />
         </a>
