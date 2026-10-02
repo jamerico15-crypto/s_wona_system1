@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Mail, Lock, Loader2, AlertCircle, Eye, EyeOff, ShieldX } from 'lucide-react';
 import { useToast } from '@/components/Toast';
-import { NocoDBError } from '@/services/nocodb';
+import { DatabaseError } from '@/services/database';
 import { TLM_PRIMARY, TLM_SECONDARY, TLM_SUPPORT } from '@/config/theme';
 import { useBranding } from '@/hooks/useBranding';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -71,7 +71,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       await onLogin(email, password);
       notify('success', t('login.loginSuccess'));
     } catch (err) {
-      const msg = err instanceof NocoDBError
+      const msg = err instanceof DatabaseError
         ? (err.isCors ? `${err.message}` : err.message)
         : err instanceof Error ? err.message : t('login.loginFailed');
       setError(msg);

@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 import {
   fetchRecords, createRecord, updateRecord, deleteRecord,
-  NocoDBError,
-} from '@/services/nocodb';
+  DatabaseError,
+} from '@/services/database';
 import { useToast } from '@/components/Toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useProject } from '@/hooks/useProject';
@@ -26,8 +26,8 @@ import ProjectTableVisibility from '@/components/ProjectTableVisibility';
 import ProjectVisibility from '@/components/ProjectVisibility';
 import VisibilityPanel from '@/components/VisibilityPanel';
 import PermissionPanel from '@/components/PermissionPanel';
-import { fetchCollections } from '@/services/nocodb';
-import type { NocoBaseCollection } from '@/types/nocodb';
+import { fetchCollections } from '@/services/database';
+import type { TableCollection } from '@/types/database';
 
 
 interface MainAdminPageProps {
@@ -49,7 +49,7 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
   const [deletingProject, setDeletingProject] = useState<Project | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>('projects');
-  const [allCollections, setAllCollections] = useState<NocoBaseCollection[]>([]);
+  const [allCollections, setAllCollections] = useState<TableCollection[]>([]);
   const { branding } = useBranding();
   const { t } = useLanguage();
 
@@ -91,7 +91,7 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
         setProjects(assignedProjects);
       }
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar projetos.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao carregar projetos.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -111,7 +111,7 @@ export default function MainAdminPage({ onEnterProject }: MainAdminPageProps) {
       setDeletingProject(null);
       loadProjects();
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao eliminar projeto.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao eliminar projeto.';
       notify('error', msg);
     } finally {
       setDeleteLoading(false);
@@ -627,7 +627,7 @@ function CreateProjectModal({ onClose, onCreated }: { onClose: () => void; onCre
       notify('success', `Projeto "${nome}" criado com sucesso.`);
       onCreated();
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao criar projeto.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao criar projeto.';
       notify('error', msg);
     } finally {
       setSubmitting(false);
@@ -666,7 +666,7 @@ function EditProjectModal({ project, onClose, onUpdated }: { project: Project; o
       notify('success', `Projeto "${nome}" atualizado com sucesso.`);
       onUpdated();
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao atualizar projeto.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao atualizar projeto.';
       notify('error', msg);
     } finally {
       setSubmitting(false);

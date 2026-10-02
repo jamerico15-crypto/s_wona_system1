@@ -1,13 +1,13 @@
 import { useEffect, useState, useCallback, useRef, type ReactNode, type FormEvent } from 'react';
 import { X, Save, Loader2, Plus, Search, ChevronDown, Check, AlertCircle } from 'lucide-react';
-import type { NocoBaseField } from '@/types/nocodb';
+import type { FieldDef } from '@/types/database';
 import { useLanguage } from '@/hooks/useLanguage';
-import { fetchRecords, NocoDBError } from '@/services/nocodb';
+import { fetchRecords, DatabaseError } from '@/services/database';
 
 interface RecordFormModalProps {
   open: boolean;
   mode: 'create' | 'edit';
-  fields: NocoBaseField[];
+  fields: FieldDef[];
   initialValues?: Record<string, unknown>;
   collectionTitle: string;
   readOnly?: boolean;
@@ -17,7 +17,7 @@ interface RecordFormModalProps {
 
 const SYSTEM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'seq']);
 
-function isEditable(field: NocoBaseField): boolean {
+function isEditable(field: FieldDef): boolean {
   if (SYSTEM_FIELDS.has(field.name)) return false;
   if (field.interface === 'createdAt' || field.interface === 'updatedAt') return false;
   if (field.interface === 'createdBy' || field.interface === 'updatedBy') return false;
@@ -28,7 +28,7 @@ function isEditable(field: NocoBaseField): boolean {
   return true;
 }
 
-function isRequired(field: NocoBaseField): boolean {
+function isRequired(field: FieldDef): boolean {
   if (field.required) return true;
   if (field.allowNull === false) return true;
   const uiSchema = field.uiSchema;
@@ -41,11 +41,11 @@ function isRequired(field: NocoBaseField): boolean {
   return false;
 }
 
-function fieldLabel(field: NocoBaseField): string {
+function fieldLabel(field: FieldDef): string {
   return field.title || field.name;
 }
 
-function emptyValueFor(field: NocoBaseField): unknown {
+function emptyValueFor(field: FieldDef): unknown {
   switch (field.interface) {
     case 'checkbox':
     case 'boolean':
@@ -252,13 +252,13 @@ function FieldInput({
   allValues,
   allFields,
 }: {
-  field: NocoBaseField;
+  field: FieldDef;
   value: unknown;
   onChange: (value: unknown) => void;
   hasError: boolean;
   readOnly?: boolean;
   allValues: Record<string, unknown>;
-  allFields: NocoBaseField[];
+  allFields: FieldDef[];
 }): ReactNode {
   const { t } = useLanguage();
   const label = fieldLabel(field);
@@ -487,13 +487,13 @@ function RelationPicker({
   allValues,
   allFields,
 }: {
-  field: NocoBaseField;
+  field: FieldDef;
   value: unknown;
   onChange: (value: unknown) => void;
   inputClass: string;
   readOnly?: boolean;
   allValues: Record<string, unknown>;
-  allFields: NocoBaseField[];
+  allFields: FieldDef[];
 }): ReactNode {
   const { t } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -549,7 +549,7 @@ function RelationPicker({
       });
       setOptions(data.data ?? []);
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Error loading options';
+      const msg = err instanceof DatabaseError ? err.message : 'Error loading options';
       setError(msg);
       setOptions([]);
     } finally {

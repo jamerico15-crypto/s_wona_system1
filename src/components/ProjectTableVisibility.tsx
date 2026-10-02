@@ -11,15 +11,15 @@ import {
   fetchProjectTableVisibility,
   upsertProjectTableVisibility,
   fetchAllUserProjectAssignments,
-  NocoDBError,
-  type NocoBaseCollection,
-  type NocoBaseUser,
-  type NocoBaseRole,
+  DatabaseError,
+  type TableCollection,
+  type AppUser,
+  type RoleDef,
   type ProjectInfo,
   type ProjectTableVisibilityRow,
   type UserProjectAssignment,
   type VisibilityTarget,
-} from '@/services/nocodb';
+} from '@/services/database';
 import { useToast } from '@/components/Toast';
 import { TLM_PRIMARY } from '@/config/theme';
 import { collectionDisplayTitle } from '@/components/Sidebar';
@@ -27,10 +27,10 @@ import { collectionDisplayTitle } from '@/components/Sidebar';
 export default function ProjectTableVisibility() {
   const { notify } = useToast();
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
-  const [users, setUsers] = useState<NocoBaseUser[]>([]);
-  const [roles, setRoles] = useState<NocoBaseRole[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [roles, setRoles] = useState<RoleDef[]>([]);
   const [assignments, setAssignments] = useState<UserProjectAssignment[]>([]);
-  const [allCollections, setAllCollections] = useState<NocoBaseCollection[]>([]);
+  const [allCollections, setAllCollections] = useState<TableCollection[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | number | null>(null);
   const [targetType, setTargetType] = useState<VisibilityTarget>('user');
   const [selectedUserId, setSelectedUserId] = useState<string | number | null>(null);
@@ -60,7 +60,7 @@ export default function ProjectTableVisibility() {
         setSelectedProjectId(projs[0].id);
       }
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar dados.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao carregar dados.';
       notify('error', msg);
     } finally {
       setLoading(false);
@@ -153,7 +153,7 @@ export default function ProjectTableVisibility() {
       );
       notify('success', next ? `Tabela "${collectionName}" agora visível.` : `Tabela "${collectionName}" ocultada.`);
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao atualizar visibilidade.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao atualizar visibilidade.';
       notify('error', msg);
       setVisibilityRows((prev) => {
         const existing = prev.find((r) => r.collection_name === collectionName);

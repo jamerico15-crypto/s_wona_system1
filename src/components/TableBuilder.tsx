@@ -3,11 +3,11 @@ import { Plus, Trash2, Loader2, Table2, X, GripVertical } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import { useProject } from '@/hooks/useProject';
 import { useLanguage } from '@/hooks/useLanguage';
-import { createCollection, createField, deleteCollection, NocoDBError } from '@/services/nocodb';
-import type { NocoBaseCollection } from '@/types/nocodb';
+import { createCollection, createField, deleteCollection, DatabaseError } from '@/services/database';
+import type { TableCollection } from '@/types/database';
 
 interface TableBuilderProps {
-  collections: NocoBaseCollection[];
+  collections: TableCollection[];
   onTableCreated: () => void;
   onTableDeleted: (collectionName: string) => void;
 }
@@ -111,7 +111,7 @@ export default function TableBuilder({ collections, onTableCreated, onTableDelet
       resetForm();
       onTableCreated();
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao criar a tabela.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao criar a tabela.';
       notify('error', msg);
     } finally {
       setSubmitting(false);
@@ -125,7 +125,7 @@ export default function TableBuilder({ collections, onTableCreated, onTableDelet
       notify('success', `Tabela "${collectionTitle}" eliminada.`);
       onTableDeleted(collectionName);
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao eliminar a tabela.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao eliminar a tabela.';
       notify('error', msg);
     } finally {
       setDeletingTable(null);

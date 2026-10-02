@@ -32,12 +32,12 @@ export default function ConfigBanner({ missing }: ConfigBannerProps) {
           Pode obter o token nas definições de API do servidor.
         </p>
         <a
-          href="https://docs.nocobase.com/"
+          href="https://supabase.com/docs"
           target="_blank"
           rel="noreferrer"
           className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-amber-700 hover:text-amber-900"
         >
-          Documentação do NocoBase
+          Documentação do Supabase
           <ExternalLink className="h-4 w-4" />
         </a>
       </div>

@@ -22,9 +22,9 @@ import {
   fetchRecords,
   fetchProjectTableVisibility,
   getConfigStatus,
-  NocoDBError,
-} from '@/services/nocodb';
-import type { NocoBaseCollection } from '@/types/nocodb';
+  DatabaseError,
+} from '@/services/database';
+import type { TableCollection } from '@/types/database';
 import { TLM_PRIMARY } from '@/config/theme';
 import { useLanguage } from '@/hooks/useLanguage';
 import { useToast } from '@/components/Toast';
@@ -57,9 +57,9 @@ export default function App() {
     projectRole, setProjectRole, accessDenied, setAccessDenied,
     resetProjectState, tablePrefix,
   } = useProject();
-  const [collections, setCollections] = useState<NocoBaseCollection[]>([]);
+  const [collections, setCollections] = useState<TableCollection[]>([]);
   const [projectHiddenTables, setProjectHiddenTables] = useState<Set<string>>(new Set());
-  const [activeCollection, setActiveCollection] = useState<NocoBaseCollection | null>(null);
+  const [activeCollection, setActiveCollection] = useState<TableCollection | null>(null);
   const [search, setSearch] = useState('');
   const [loadingCollections, setLoadingCollections] = useState(true);
   const [collectionsError, setCollectionsError] = useState<string | null>(null);
@@ -209,7 +209,7 @@ export default function App() {
       }
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar as tabelas.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao carregar as tabelas.';
       setCollectionsError(msg);
       setCollections([]);
     } finally {
@@ -320,7 +320,7 @@ export default function App() {
     [collections, projectHiddenTables],
   );
 
-  const handleSelectCollection = (collection: NocoBaseCollection) => {
+  const handleSelectCollection = (collection: TableCollection) => {
     setActiveCollection(collection);
   };
 
@@ -466,7 +466,7 @@ export default function App() {
           </div>
           <h2 className="text-xl font-bold text-slate-800">Nenhum projeto ativo atribuído</h2>
           <p className="mt-2 text-sm text-slate-500">
-            Não existe um projeto ativo associado ao seu utilizador. Peça ao administrador para atribuir um projeto na NocoBase.
+            Não existe um projeto ativo associado ao seu utilizador. Peça ao administrador para atribuir um projeto na Supabase.
           </p>
           <button
             onClick={handleBackToAdmin}

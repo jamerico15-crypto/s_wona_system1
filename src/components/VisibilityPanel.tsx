@@ -3,9 +3,9 @@ import {
   Table2, Eye, EyeOff, Search, Loader2, AlertTriangle, RefreshCw,
   Rows3, Rows4, ChevronRight, Columns3, Info, Users,
 } from 'lucide-react';
-import { fetchFields, fetchRoles, NocoDBError } from '@/services/nocodb';
-import type { NocoBaseCollection, NocoBaseField } from '@/types/nocodb';
-import type { NocoBaseRole } from '@/services/nocodb';
+import { fetchFields, fetchRoles, DatabaseError } from '@/services/database';
+import type { TableCollection, FieldDef } from '@/types/database';
+import type { RoleDef } from '@/services/database';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useLanguage } from '@/hooks/useLanguage';
 
@@ -16,7 +16,7 @@ import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
 
 
 interface VisibilityPanelProps {
-  collections: NocoBaseCollection[];
+  collections: TableCollection[];
 }
 
 export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
@@ -35,9 +35,9 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
     loading: visibilityLoading,
   } = useVisibility();
 
-  const [roles, setRoles] = useState<NocoBaseRole[]>([]);
+  const [roles, setRoles] = useState<RoleDef[]>([]);
   const [activeCollectionName, setActiveCollectionName] = useState<string | null>(null);
-  const [fields, setFields] = useState<NocoBaseField[]>([]);
+  const [fields, setFields] = useState<FieldDef[]>([]);
   const [loadingFields, setLoadingFields] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [tableSearch, setTableSearch] = useState('');
@@ -78,7 +78,7 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
       setFields(data);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      const msg = err instanceof NocoDBError ? err.message : t('visibility.errorLoadingFields');
+      const msg = err instanceof DatabaseError ? err.message : t('visibility.errorLoadingFields');
       setFieldError(msg);
       setFields([]);
     } finally {
@@ -98,7 +98,7 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
     return () => controller.abort();
   }, [activeCollectionName, loadFields]);
 
-  const handleToggleCollection = (c: NocoBaseCollection) => {
+  const handleToggleCollection = (c: TableCollection) => {
     const wasVisible = collectionVisible(c.name);
     toggleCollection(c.name);
     notify(
@@ -109,7 +109,7 @@ export default function VisibilityPanel({ collections }: VisibilityPanelProps) {
     );
   };
 
-  const handleToggleField = (field: NocoBaseField) => {
+  const handleToggleField = (field: FieldDef) => {
     const wasVisible = fieldVisible(activeCollectionName!, field.name);
     toggleField(activeCollectionName!, field.name);
     notify(

@@ -4,7 +4,7 @@ import { useBranding } from '@/hooks/useBranding';
 import { DEFAULT_BRANDING } from '@/contexts/BrandingContext';
 import { useToast } from '@/components/Toast';
 import { TLM_PRIMARY } from '@/config/theme';
-import { uploadAttachment, type NocoBaseAttachment } from '@/services/nocodb';
+import { uploadAttachment, type Attachment } from '@/services/database';
 
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml'];
 
@@ -18,7 +18,7 @@ export default function BrandingSettingsModal({ onClose }: BrandingSettingsModal
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [logoPreview, setLogoPreview] = useState<string | null>(branding.logo);
-  const [logoAttachment, setLogoAttachment] = useState<NocoBaseAttachment | null>(null);
+  const [logoAttachment, setLogoAttachment] = useState<Attachment | null>(null);
   const [loginTitle, setLoginTitle] = useState(branding.loginTitle);
   const [loginSubtitle, setLoginSubtitle] = useState(branding.loginSubtitle);
   const [loginButtonText, setLoginButtonText] = useState(branding.loginButtonText);

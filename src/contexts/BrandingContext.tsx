@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { fetchBrandingSettings, saveBrandingSettings, resetBrandingSettings, type NocoBaseAttachment } from '@/services/nocodb';
+import { fetchBrandingSettings, saveBrandingSettings, resetBrandingSettings, type Attachment } from '@/services/database';
 
 function resolveAttachmentUrl(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -23,7 +23,7 @@ export const DEFAULT_BRANDING: BrandingConfig = {
 
 export interface BrandingContextValue {
   branding: BrandingConfig;
-  updateBranding: (partial: Partial<BrandingConfig>, logoAttachment?: NocoBaseAttachment[] | null) => Promise<void>;
+  updateBranding: (partial: Partial<BrandingConfig>, logoAttachment?: Attachment[] | null) => Promise<void>;
   resetBranding: () => Promise<void>;
   loading: boolean;
 }
@@ -72,7 +72,7 @@ function clearStorage() {
 }
 
 function mapBrandingRecord(row: {
-  logo: NocoBaseAttachment[] | null;
+  logo: Attachment[] | null;
   login_title: string;
   login_subtitle: string;
   login_button_text: string;
@@ -99,7 +99,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
           setBranding(mapBrandingRecord(record));
         }
       } catch {
-        // NocoBase unavailable — keep localStorage / defaults
+        // Supabase unavailable — keep localStorage / defaults
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -115,7 +115,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handler);
   }, []);
 
-  const updateBranding = useCallback(async (partial: Partial<BrandingConfig>, logoAttachment?: NocoBaseAttachment[] | null) => {
+  const updateBranding = useCallback(async (partial: Partial<BrandingConfig>, logoAttachment?: Attachment[] | null) => {
     const next = { ...branding, ...partial };
     setBranding(next);
     saveToStorage(next);

@@ -10,9 +10,9 @@ import {
   fetchRoles,
   type TablePermissionRow,
   type TablePermission,
-  type NocoBaseRole,
-} from '@/services/nocodb';
-import type { NocoBaseCollection } from '@/types/nocodb';
+  type RoleDef,
+} from '@/services/database';
+import type { TableCollection } from '@/types/database';
 import { useToast } from '@/components/Toast';
 import { displayTitle } from '@/components/Sidebar';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
@@ -27,12 +27,12 @@ const PERMISSION_META: { key: TablePermission; label: string; icon: typeof Eye; 
 ];
 
 interface PermissionPanelProps {
-  collections: NocoBaseCollection[];
+  collections: TableCollection[];
 }
 
 export default function PermissionPanel({ collections }: PermissionPanelProps) {
   const { notify } = useToast();
-  const [roles, setRoles] = useState<NocoBaseRole[]>([]);
+  const [roles, setRoles] = useState<RoleDef[]>([]);
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [search, setSearch] = useState('');
   const [permissions, setPermissions] = useState<TablePermissionRow[]>([]);

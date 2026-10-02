@@ -5,9 +5,9 @@ import Pagination from '@/components/Pagination';
 import RecordFormModal from '@/components/RecordFormModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/components/Toast';
-import { fetchFields, fetchRecords, createRecord, updateRecord, deleteRecord, fetchPermissionsForRole, NocoDBError } from '@/services/nocodb';
-import type { NocoBaseField, NocoBaseCollection } from '@/types/nocodb';
-import type { TablePermissionRow } from '@/services/nocodb';
+import { fetchFields, fetchRecords, createRecord, updateRecord, deleteRecord, fetchPermissionsForRole, DatabaseError } from '@/services/database';
+import type { FieldDef, TableCollection } from '@/types/database';
+import type { TablePermissionRow } from '@/services/database';
 import { useAuth } from '@/hooks/useAuth';
 import { useVisibility } from '@/hooks/useVisibility';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -15,7 +15,7 @@ import { useProject } from '@/hooks/useProject';
 import { displayTitle } from '@/components/Sidebar';
 
 interface CollectionViewerProps {
-  collection: NocoBaseCollection;
+  collection: TableCollection;
 }
 
 export default function CollectionViewer({ collection }: CollectionViewerProps) {
@@ -24,7 +24,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
   const { projectRole } = useProject();
   const { fieldVisible } = useVisibility();
   const { t } = useLanguage();
-  const [fields, setFields] = useState<NocoBaseField[]>([]);
+  const [fields, setFields] = useState<FieldDef[]>([]);
   const [records, setRecords] = useState<Record<string, unknown>[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -60,7 +60,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
       setFields(data);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar os campos da tabela.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao carregar os campos da tabela.';
       setError(msg);
     } finally {
       setLoadingFields(false);
@@ -76,7 +76,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
       setTotalRows(data.meta?.count ?? 0);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      const msg = err instanceof NocoDBError ? err.message : t('table.noData');
+      const msg = err instanceof DatabaseError ? err.message : t('table.noData');
       setError(msg);
       setRecords([]);
     } finally {
@@ -93,7 +93,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
     setError(null);
     setPermOverrides([]);
     loadFields(controller.signal);
-    // Fetch permissions for all of the user's real NocoBase roles
+    // Fetch permissions for all of the user's real Supabase roles
     const realRoleNames = (user?.roles ?? []).map((r) => r.name);
     if (realRoleNames.length > 0 && !realRoleNames.includes('super_admin')) {
       Promise.all(
@@ -156,7 +156,7 @@ export default function CollectionViewer({ collection }: CollectionViewerProps) 
       setDeleteTarget(null);
       loadData();
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao eliminar o registo.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao eliminar o registo.';
       notify('error', msg);
     } finally {
       setDeleting(false);

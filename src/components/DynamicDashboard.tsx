@@ -9,11 +9,11 @@ import {
   Database, Table2, Loader2, AlertTriangle, RefreshCw, BarChart3, Sparkles,
 } from 'lucide-react';
 import { useProject } from '@/hooks/useProject';
-import { fetchFields, fetchRecords, NocoDBError } from '@/services/nocodb';
+import { fetchFields, fetchRecords, DatabaseError } from '@/services/database';
 import { useToast } from '@/components/Toast';
 import { collectionDisplayTitle } from '@/components/Sidebar';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
-import type { NocoBaseCollection, NocoBaseField } from '@/types/nocodb';
+import type { TableCollection, FieldDef } from '@/types/database';
 
 echarts.use([TreemapChart, BarChart, TooltipComponent, VisualMapComponent, GridComponent, CanvasRenderer]);
 
@@ -46,7 +46,7 @@ interface ChartData {
   totalRecords: number;
 }
 
-function pickGroupByField(fields: NocoBaseField[]): NocoBaseField | null {
+function pickGroupByField(fields: FieldDef[]): FieldDef | null {
   const systemFields = new Set(['id', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', '__collection']);
   const priorityKeywords = ['district', 'distrito', 'village', 'comunidade', 'status', 'tipo', 'type', 'categoria', 'category', 'genero', 'gender', 'provincia', 'province'];
 
@@ -72,7 +72,7 @@ function humanizeLabel(name: string): string {
     .trim();
 }
 
-export default function DynamicDashboard({ collections }: { collections: NocoBaseCollection[] }) {
+export default function DynamicDashboard({ collections }: { collections: TableCollection[] }) {
   const { activeProject } = useProject();
   const { notify } = useToast();
   const [kpis, setKpis] = useState<KpiData[]>([]);
@@ -80,7 +80,7 @@ export default function DynamicDashboard({ collections }: { collections: NocoBas
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadKpis = useCallback(async (cols: NocoBaseCollection[]) => {
+  const loadKpis = useCallback(async (cols: TableCollection[]) => {
     const topCols = cols.slice(0, 4);
     const results = await Promise.allSettled(
       topCols.map(async (c) => {
@@ -97,8 +97,8 @@ export default function DynamicDashboard({ collections }: { collections: NocoBas
       .map((r) => r.value);
   }, []);
 
-  const loadChart = useCallback(async (cols: NocoBaseCollection[]): Promise<ChartData | null> => {
-    const scored: { collection: NocoBaseCollection; count: number }[] = [];
+  const loadChart = useCallback(async (cols: TableCollection[]): Promise<ChartData | null> => {
+    const scored: { collection: TableCollection; count: number }[] = [];
     for (const c of cols) {
       try {
         const data = await fetchRecords(c.name, { page: 1, pageSize: 1 });
@@ -174,7 +174,7 @@ export default function DynamicDashboard({ collections }: { collections: NocoBas
       setChartData(chartResult);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar os dados do dashboard.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao carregar os dados do dashboard.';
       setError(msg);
       notify('error', msg);
     } finally {

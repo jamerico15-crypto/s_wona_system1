@@ -1,5 +1,5 @@
 import { createContext, useState, useCallback, useMemo, type ReactNode } from 'react';
-import { signIn as apiSignIn, fetchRecords, fetchUserWithProjects, validateProjectAccess, type NocoBaseUser } from '@/services/nocodb';
+import { signIn as apiSignIn, fetchRecords, fetchUserWithProjects, validateProjectAccess, type AppUser } from '@/services/database';
 import type { Project } from '@/contexts/ProjectContext';
 import type { ProjectRole } from '@/contexts/ProjectContext';
 
@@ -11,7 +11,7 @@ export interface ProjectAssignment {
 }
 
 export interface AuthState {
-  user: NocoBaseUser | null;
+  user: AppUser | null;
   token: string | null;
   role: AppRole;
   loading: boolean;
@@ -27,7 +27,7 @@ export interface AuthState {
 
 export const AuthContext = createContext<AuthState | null>(null);
 
-function mapRole(user: NocoBaseUser): AppRole {
+function mapRole(user: AppUser): AppRole {
   const roleNames = user.roles.map((r) => r.name.trim().toLowerCase());
 
   if (roleNames.some((n) =>
@@ -65,8 +65,8 @@ function mapProjectRole(roleName: string | null): ProjectRole {
   return mapAssignmentRole(roleName);
 }
 
-async function fetchProjectAssignments(user: NocoBaseUser, token?: string | null): Promise<{ projects: Project[]; assignments: ProjectAssignment[] }> {
-  // Strategy 1: NocoBase users API with nested appends
+async function fetchProjectAssignments(user: AppUser, token?: string | null): Promise<{ projects: Project[]; assignments: ProjectAssignment[] }> {
+  // Strategy 1: Supabase users API with nested appends
   // GET /api/users/:userId?appends=usuarios_projetos.projeto_id
   try {
     const userData = await fetchUserWithProjects(user.id, token);
@@ -176,7 +176,7 @@ async function fetchProjectAssignments(user: NocoBaseUser, token?: string | null
   return { projects: [], assignments: [] };
 }
 
-const STORAGE_KEY = 'nocobase_active_project';
+const STORAGE_KEY = 'supabase_active_project';
 
 function loadStoredProjectId(): string | number | null {
   try {
@@ -188,7 +188,7 @@ function loadStoredProjectId(): string | number | null {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<NocoBaseUser | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [assignedProjects, setAssignedProjects] = useState<Project[]>([]);

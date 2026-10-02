@@ -7,14 +7,14 @@ import {
   fetchUsers, fetchAllProjects, fetchAllUserProjectAssignments,
   createUserProjectAssignment, updateUserProjectAssignmentRole,
   deleteUserProjectAssignment, fetchRoles,
-  NocoDBError, type NocoBaseUser, type NocoBaseRole,
+  DatabaseError, type AppUser, type RoleDef,
   type ProjectInfo, type UserProjectAssignment,
-} from '@/services/nocodb';
+} from '@/services/database';
 import { useToast } from '@/components/Toast';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
 import ConfirmDialog from '@/components/ConfirmDialog';
 
-function roleLabel(role: string | null, roles: NocoBaseRole[]): string {
+function roleLabel(role: string | null, roles: RoleDef[]): string {
   if (!role) return 'Sem role';
   const found = roles.find((r) => r.name === role.trim());
   return found ? (found.title || found.name) : role;
@@ -33,7 +33,7 @@ function roleBadgeClass(role: string | null): string {
 
 export default function UserProjectManager() {
   const { notify } = useToast();
-  const [users, setUsers] = useState<NocoBaseUser[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [assignments, setAssignments] = useState<UserProjectAssignment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +44,7 @@ export default function UserProjectManager() {
   const [editingAssignment, setEditingAssignment] = useState<UserProjectAssignment | null>(null);
   const [deletingAssignment, setDeletingAssignment] = useState<UserProjectAssignment | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [roles, setRoles] = useState<NocoBaseRole[]>([]);
+  const [roles, setRoles] = useState<RoleDef[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -61,7 +61,7 @@ export default function UserProjectManager() {
       setAssignments(a);
       setRoles(r);
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar dados.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao carregar dados.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -119,7 +119,7 @@ export default function UserProjectManager() {
       setDeletingAssignment(null);
       loadData();
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao remover atribuição.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao remover atribuição.';
       notify('error', msg);
     } finally {
       setDeleteLoading(false);
@@ -153,7 +153,7 @@ export default function UserProjectManager() {
       <div className="flex items-center gap-2 border-b border-slate-100 bg-emerald-50 px-5 py-2.5">
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
         <p className="text-xs text-emerald-700">
-          As alterações são guardadas diretamente no NocoBase (tabela <code className="rounded bg-emerald-100 px-1">usuarios_projetos</code>) e refletem-se imediatamente no Bolt.
+          As alterações são guardadas diretamente no Supabase (tabela <code className="rounded bg-emerald-100 px-1">usuarios_projetos</code>) e refletem-se imediatamente no Bolt.
         </p>
       </div>
 
@@ -376,7 +376,7 @@ function EditRoleButton({
   notify,
 }: {
   assignment: UserProjectAssignment;
-  roles: NocoBaseRole[];
+  roles: RoleDef[];
   onUpdated: (newRole: string) => void;
   notify: (type: 'success' | 'error', msg: string) => void;
 }) {
@@ -390,7 +390,7 @@ function EditRoleButton({
       notify('success', `Role atualizado para "${roleLabel(newRole, roles)}".`);
       onUpdated(newRole);
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao atualizar role.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao atualizar role.';
       notify('error', msg);
     } finally {
       setSaving(false);
@@ -436,9 +436,9 @@ function AssignProjectModal({
   onClose,
   onAssigned,
 }: {
-  user: NocoBaseUser;
+  user: AppUser;
   availableProjects: ProjectInfo[];
-  roles: NocoBaseRole[];
+  roles: RoleDef[];
   onClose: () => void;
   onAssigned: () => void;
 }) {
@@ -458,7 +458,7 @@ function AssignProjectModal({
       notify('success', 'Projeto atribuído com sucesso.');
       onAssigned();
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao atribuir projeto.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao atribuir projeto.';
       notify('error', msg);
     } finally {
       setSubmitting(false);

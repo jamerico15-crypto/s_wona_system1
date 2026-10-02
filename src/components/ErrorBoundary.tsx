@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="mt-2 text-sm text-rose-700">{this.state.message}</p>
           {this.state.isCors && (
             <p className="mt-3 rounded-lg bg-rose-100/80 p-3 text-xs text-rose-800">
-              Isto pode ser um problema de CORS. No NocoDB, certifique-se de que o domínio desta
+              Isto pode ser um problema de CORS. No Supabase, certifique-se de que o domínio desta
               aplicação está autorizado nas definições de CORS do projeto.
             </p>
           )}

@@ -8,18 +8,18 @@ import {
   fetchUsers,
   fetchAllProjectVisibility,
   upsertProjectVisibility,
-  NocoDBError,
-  type NocoBaseUser,
+  DatabaseError,
+  type AppUser,
   type ProjectInfo,
   type ProjectVisibilityRow,
-} from '@/services/nocodb';
+} from '@/services/database';
 import { useToast } from '@/components/Toast';
 import { TLM_PRIMARY } from '@/config/theme';
 
 export default function ProjectVisibility() {
   const { notify } = useToast();
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
-  const [users, setUsers] = useState<NocoBaseUser[]>([]);
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [visibilityRows, setVisibilityRows] = useState<ProjectVisibilityRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingVisibility, setLoadingVisibility] = useState(false);
@@ -37,7 +37,7 @@ export default function ProjectVisibility() {
       setProjects(projs);
       setUsers(usrs);
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar dados.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao carregar dados.';
       notify('error', msg);
     } finally {
       setLoading(false);
@@ -99,7 +99,7 @@ export default function ProjectVisibility() {
       await upsertProjectVisibility(userId, projectId, next);
       notify('success', next ? 'Projeto agora visível.' : 'Projeto ocultado.');
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao atualizar visibilidade.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao atualizar visibilidade.';
       notify('error', msg);
       setVisibilityRows((prev) => {
         const existing = prev.find((r) => String(r.user_id) === String(userId) && String(r.project_id) === String(projectId));

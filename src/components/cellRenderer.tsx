@@ -1,6 +1,6 @@
 import { Check, Minus, Link2, FileText, Hash, Calendar, Type, Paperclip } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { NocoBaseField } from '@/types/nocodb';
+import type { FieldDef } from '@/types/database';
 
 export interface CellRender {
   content: ReactNode;
@@ -80,13 +80,13 @@ function selectColor(title?: string): string {
   return palette[hash % palette.length];
 }
 
-function findEnumLabel(field: NocoBaseField, value: unknown): string {
+function findEnumLabel(field: FieldDef, value: unknown): string {
   if (!field.enum) return String(value);
   const opt = field.enum.find((o) => o.value === value);
   return opt ? opt.label : String(value);
 }
 
-export function renderCell(value: unknown, field: NocoBaseField): CellRender {
+export function renderCell(value: unknown, field: FieldDef): CellRender {
   const iface = field.interface;
 
   if (value == null || value === '' || (Array.isArray(value) && value.length === 0)) {

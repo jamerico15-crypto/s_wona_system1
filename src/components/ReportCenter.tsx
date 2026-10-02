@@ -9,14 +9,14 @@ import { useVisibility } from '@/hooks/useVisibility';
 import { useAuth } from '@/hooks/useAuth';
 import { useProject } from '@/hooks/useProject';
 import { useToast } from '@/components/Toast';
-import { fetchFields, fetchRecords, NocoDBError } from '@/services/nocodb';
+import { fetchFields, fetchRecords, DatabaseError } from '@/services/database';
 import {
   prepareReportData, exportExcel, exportWord, exportPdf,
   type ReportData,
 } from '@/services/reportExport';
 import { collectionDisplayTitle } from '@/components/Sidebar';
 import { TLM_PRIMARY, TLM_PRIMARY_DARK, TLM_SECONDARY } from '@/config/theme';
-import type { NocoBaseCollection, NocoBaseField } from '@/types/nocodb';
+import type { TableCollection, FieldDef } from '@/types/database';
 
 interface FilterRule {
   id: string;
@@ -26,15 +26,15 @@ interface FilterRule {
 
 type ExportFormat = 'excel' | 'word' | 'pdf';
 
-export default function ReportCenter({ collections }: { collections: NocoBaseCollection[] }) {
+export default function ReportCenter({ collections }: { collections: TableCollection[] }) {
   const { t } = useLanguage();
   const { fieldVisible } = useVisibility();
   const { user } = useAuth();
   const { activeProject } = useProject();
   const { notify } = useToast();
 
-  const [selectedCollection, setSelectedCollection] = useState<NocoBaseCollection | null>(null);
-  const [fields, setFields] = useState<NocoBaseField[]>([]);
+  const [selectedCollection, setSelectedCollection] = useState<TableCollection | null>(null);
+  const [fields, setFields] = useState<FieldDef[]>([]);
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set());
   const [loadingFields, setLoadingFields] = useState(false);
   const [fieldsError, setFieldsError] = useState<string | null>(null);
@@ -62,7 +62,7 @@ export default function ReportCenter({ collections }: { collections: NocoBaseCol
     }
   }, [visibleCollections, selectedCollection]);
 
-  const loadFields = useCallback(async (collection: NocoBaseCollection) => {
+  const loadFields = useCallback(async (collection: TableCollection) => {
     setLoadingFields(true);
     setFieldsError(null);
     try {
@@ -76,7 +76,7 @@ export default function ReportCenter({ collections }: { collections: NocoBaseCol
       setFields(visible);
       setSelectedFields(new Set(visible.map((f) => f.name)));
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : t('reports.errorLoadingFields');
+      const msg = err instanceof DatabaseError ? err.message : t('reports.errorLoadingFields');
       setFieldsError(msg);
       setFields([]);
       setSelectedFields(new Set());
@@ -172,7 +172,7 @@ export default function ReportCenter({ collections }: { collections: NocoBaseCol
       });
       setPreviewData(data.data ?? []);
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message : t('reports.errorLoadingData');
+      const msg = err instanceof DatabaseError ? err.message : t('reports.errorLoadingData');
       notify('error', msg);
       setPreviewData([]);
     } finally {
@@ -247,7 +247,7 @@ export default function ReportCenter({ collections }: { collections: NocoBaseCol
 
       notify('success', t('reports.reportGenerated'));
     } catch (err) {
-      const msg = err instanceof NocoDBError ? err.message
+      const msg = err instanceof DatabaseError ? err.message
         : err instanceof Error ? err.message
         : t('reports.errorLoadingData');
       notify('error', msg);

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type MouseEvent } from 'react';
 import { Table2, Pencil, Trash2 } from 'lucide-react';
 import { renderCell, fieldTypeIcon } from '@/components/cellRenderer';
-import type { NocoBaseField, NocoBaseCollection } from '@/types/nocodb';
+import type { FieldDef, TableCollection } from '@/types/database';
 
 const MIN_COL_WIDTH = 80;
 const STORAGE_PREFIX = 'app_col_widths_';
@@ -26,8 +26,8 @@ function saveWidths(collectionName: string, widths: Record<string, number>) {
 }
 
 interface DataGridProps {
-  collection: NocoBaseCollection;
-  fields: NocoBaseField[];
+  collection: TableCollection;
+  fields: FieldDef[];
   records: Record<string, unknown>[];
   loading: boolean;
   onEdit?: (record: Record<string, unknown>) => void;
@@ -47,7 +47,7 @@ export default function DataGrid({ collection, fields, records, loading, onEdit,
     saveWidths(collection.name, widths);
   }, [collection.name, widths]);
 
-  const handleMouseDown = useCallback((e: MouseEvent, field: NocoBaseField) => {
+  const handleMouseDown = useCallback((e: MouseEvent, field: FieldDef) => {
     e.preventDefault();
     e.stopPropagation();
     const currentWidth = widths[field.name] ?? tableRef.current?.querySelector<HTMLElement>(`th[data-field="${field.name}"]`)?.offsetWidth ?? 150;
@@ -215,7 +215,7 @@ export default function DataGrid({ collection, fields, records, loading, onEdit,
   );
 }
 
-function fieldLabel(field: NocoBaseField): string {
+function fieldLabel(field: FieldDef): string {
   if (field.title) return field.title;
   return field.name;
 }

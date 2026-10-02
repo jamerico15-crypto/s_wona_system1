@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { Database, Search, Table2, LogOut, ShieldCheck, Eye, Pencil, ChevronDown, BarChart3, Settings, ArrowLeft, Crown, PanelLeftClose, PanelLeftOpen, X, FileSpreadsheet, AlertCircle } from 'lucide-react';
-import type { NocoBaseCollection } from '@/types/nocodb';
+import type { TableCollection } from '@/types/database';
 import type { AppRole } from '@/contexts/AuthContext';
 import type { Project } from '@/contexts/ProjectContext';
 import { useBranding } from '@/hooks/useBranding';
@@ -16,9 +16,9 @@ export type SidebarView = 'dashboard' | 'table' | 'builder' | 'reports';
 const COLLAPSE_KEY = 'mcl-sidebar-collapsed';
 
 interface SidebarProps {
-  collections: NocoBaseCollection[];
+  collections: TableCollection[];
   activeCollectionName: string | null;
-  onSelect: (collection: NocoBaseCollection) => void;
+  onSelect: (collection: TableCollection) => void;
   search: string;
   onSearchChange: (value: string) => void;
   loading: boolean;
@@ -72,7 +72,7 @@ export default function Sidebar({
   const { collectionVisible, setActiveRole, setActiveRoles } = useVisibility();
   const { t } = useLanguage();
 
-  // Sync the visibility context to the current user's real NocoBase role names
+  // Sync the visibility context to the current user's real Supabase role names
   // so that role-specific visibility settings are applied in the sidebar.
   useEffect(() => {
     const realRoleNames = user?.role ? [user.role] : [];
@@ -122,10 +122,10 @@ export default function Sidebar({
   // For regular users, only prefix-matched collections are in visibleCollections.
   const useCategorizedView = isAdminRole || isOlikanassa;
 
-  const filterBySearch = (list: NocoBaseCollection[]) =>
+  const filterBySearch = (list: TableCollection[]) =>
     list.filter((c) => collectionDisplayTitle(c).toLowerCase().includes(search.toLowerCase()));
 
-  const handleSelect = (collection: NocoBaseCollection) => {
+  const handleSelect = (collection: TableCollection) => {
     onViewChange('table');
     onSelect(collection);
     onMobileClose();
@@ -273,7 +273,7 @@ export default function Sidebar({
               const catCollections = filterBySearch(
                 category.collections
                   .map((name) => collectionMap.get(name))
-                  .filter((c): c is NocoBaseCollection => c !== undefined)
+                  .filter((c): c is TableCollection => c !== undefined)
               );
               if (catCollections.length === 0 && search) return null;
 
@@ -498,7 +498,7 @@ function CollectionButton({
   active,
   onClick,
 }: {
-  collection: NocoBaseCollection;
+  collection: TableCollection;
   active: boolean;
   onClick: () => void;
 }) {
@@ -523,7 +523,7 @@ function CollapsedCollectionButton({
   active,
   onClick,
 }: {
-  collection: NocoBaseCollection;
+  collection: TableCollection;
   active: boolean;
   onClick: () => void;
 }) {
@@ -543,7 +543,7 @@ function CollapsedCollectionButton({
   );
 }
 
-export function collectionDisplayTitle(c: NocoBaseCollection): string {
+export function collectionDisplayTitle(c: TableCollection): string {
   const custom = getDisplayName(c.name);
   if (custom) return custom;
   if (c.title) {
@@ -552,6 +552,6 @@ export function collectionDisplayTitle(c: NocoBaseCollection): string {
   return c.name;
 }
 
-export function displayTitle(c: NocoBaseCollection): string {
+export function displayTitle(c: TableCollection): string {
   return collectionDisplayTitle(c);
 }

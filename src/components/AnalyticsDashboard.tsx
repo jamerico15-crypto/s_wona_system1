@@ -12,12 +12,12 @@ import {
 } from 'lucide-react';
 
 echarts.use([TreemapChart, BarChart, TooltipComponent, VisualMapComponent, GridComponent, CanvasRenderer]);
-import { fetchRecords, NocoDBError } from '@/services/nocodb';
+import { fetchRecords, DatabaseError } from '@/services/database';
 import { useToast } from '@/components/Toast';
 import { useProject } from '@/hooks/useProject';
 import DynamicDashboard from '@/components/DynamicDashboard';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
-import type { NocoBaseCollection } from '@/types/nocodb';
+import type { TableCollection } from '@/types/database';
 
 interface ScreeningRecord {
   id: string | number;
@@ -52,7 +52,7 @@ interface LiderancaRecord {
   [key: string]: unknown;
 }
 
-export default function AnalyticsDashboard({ collections }: { collections?: NocoBaseCollection[] }) {
+export default function AnalyticsDashboard({ collections }: { collections?: TableCollection[] }) {
   const { isOlikanassa } = useProject();
 
   if (!isOlikanassa && collections) {
@@ -144,7 +144,7 @@ function OlikanassaDashboard() {
       setScreenings(allScreenings);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      const msg = err instanceof NocoDBError ? err.message : 'Falha ao carregar os dados de rastreio.';
+      const msg = err instanceof DatabaseError ? err.message : 'Falha ao carregar os dados de rastreio.';
       setError(msg);
       notify('error', msg);
     } finally {

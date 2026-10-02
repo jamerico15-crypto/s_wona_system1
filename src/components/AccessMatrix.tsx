@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ShieldCheck, Loader2, AlertCircle, RefreshCw, Eye, Crown, Pencil, UserCircle } from 'lucide-react';
-import { fetchUsersWithProjects, NocoDBError, type NocoBaseUserWithProject } from '@/services/nocodb';
+import { fetchUsersWithProjects, DatabaseError, type UserWithProject } from '@/services/database';
 import { TLM_PRIMARY, TLM_SECONDARY } from '@/config/theme';
 
 function roleBadgeClass(roles: string | null): string {
@@ -33,7 +33,7 @@ function roleLabel(roles: string | null): string {
 }
 
 export default function AccessMatrix() {
-  const [users, setUsers] = useState<NocoBaseUserWithProject[]>([]);
+  const [users, setUsers] = useState<UserWithProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,14 +44,14 @@ export default function AccessMatrix() {
       const data = await fetchUsersWithProjects();
       setUsers(data);
     } catch (err) {
-      if (err instanceof NocoDBError) {
+      if (err instanceof DatabaseError) {
         if (err.status === 401 || err.status === 403) {
-          setError('Erro ao conectar ao servidor externo NocoBase: acesso não autorizado (401/403).');
+          setError('Erro ao conectar ao servidor externo Supabase: acesso não autorizado (401/403).');
         } else {
-          setError(`Erro ao conectar ao servidor externo NocoBase (${err.status}): ${err.message}`);
+          setError(`Erro ao conectar ao servidor externo Supabase (${err.status}): ${err.message}`);
         }
       } else {
-        setError('Erro ao conectar ao servidor externo NocoBase. Verifique a ligação de rede.');
+        setError('Erro ao conectar ao servidor externo Supabase. Verifique a ligação de rede.');
       }
       setUsers([]);
     } finally {
@@ -76,7 +76,7 @@ export default function AccessMatrix() {
           </div>
           <div>
             <h3 className="text-base font-bold text-slate-800">Matriz de Controlo de Acessos</h3>
-            <p className="text-xs text-slate-500">Espelho de consulta (só leitura) dos utilizadores e projetos ativos no NocoBase</p>
+            <p className="text-xs text-slate-500">Espelho de consulta (só leitura) dos utilizadores e projetos ativos no Supabase</p>
           </div>
         </div>
         <button
@@ -93,7 +93,7 @@ export default function AccessMatrix() {
       <div className="flex items-center gap-2 border-b border-slate-100 bg-sky-50 px-5 py-2.5">
         <Eye className="h-3.5 w-3.5 text-sky-600" />
         <p className="text-xs text-sky-700">
-          Modo de consulta. Os vínculos e atribuições são geridos centralmente no painel nativo do NocoBase.
+          Modo de consulta. Os vínculos e atribuições são geridos centralmente no painel nativo do Supabase.
         </p>
       </div>
 
@@ -102,7 +102,7 @@ export default function AccessMatrix() {
         <div className="mx-5 mt-4 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-rose-900">Erro ao conectar ao servidor externo NocoBase</p>
+            <p className="text-sm font-medium text-rose-900">Erro ao conectar ao servidor externo Supabase</p>
             <p className="mt-1 text-sm text-rose-700">{error}</p>
           </div>
         </div>
@@ -112,7 +112,7 @@ export default function AccessMatrix() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-          <p className="mt-3 text-sm text-slate-500">A carregar utilizadores do NocoBase...</p>
+          <p className="mt-3 text-sm text-slate-500">A carregar utilizadores do Supabase...</p>
         </div>
       ) : error ? null : users.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12">
@@ -120,7 +120,7 @@ export default function AccessMatrix() {
             <UserCircle className="h-6 w-6 text-slate-400" />
           </div>
           <p className="text-sm font-medium text-slate-600">Nenhum utilizador encontrado</p>
-          <p className="mt-1 text-xs text-slate-400">O servidor NocoBase não retornou dados de utilizadores.</p>
+          <p className="mt-1 text-xs text-slate-400">O servidor Supabase não retornou dados de utilizadores.</p>
         </div>
       ) : (
         <div className="px-5 py-4">
@@ -196,7 +196,7 @@ export default function AccessMatrix() {
               <h4 className="mb-3 text-sm font-bold text-slate-600">Utilizadores Agrupados por Projeto</h4>
               <div className="space-y-3">
                 {Object.entries(
-                  usersWithProject.reduce<Record<string, { projectName: string; users: NocoBaseUserWithProject[] }>>((acc, u) => {
+                  usersWithProject.reduce<Record<string, { projectName: string; users: UserWithProject[] }>>((acc, u) => {
                     const key = String(u.active_project!.id);
                     if (!acc[key]) acc[key] = { projectName: u.active_project!.nome, users: [] };
                     acc[key].users.push(u);
