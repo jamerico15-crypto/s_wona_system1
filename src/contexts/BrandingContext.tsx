@@ -1,15 +1,10 @@
 import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { fetchBrandingSettings, saveBrandingSettings, resetBrandingSettings, type NocoBaseAttachment } from '@/services/nocodb';
 
-const NOCOBASE_URL = (import.meta.env.VITE_NOCODB_URL as string | undefined)?.replace(/\/+$/, '') ?? '';
-
 function resolveAttachmentUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
-  // Route relative attachment URLs through the /api proxy in production
-  // to avoid CORS issues. The NocoBase server serves attachments at /api/attachments/...
-  const proxyBase = import.meta.env.DEV ? '' : '';
-  return `${proxyBase}${url.startsWith('/') ? '' : '/'}${url}`;
+  return url;
 }
 
 export interface BrandingConfig {

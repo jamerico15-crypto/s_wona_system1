@@ -1,6 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://vmi3107375.contaboserver.net/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
