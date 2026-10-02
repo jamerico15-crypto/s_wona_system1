@@ -72,6 +72,34 @@ const TABLE_MAP: Record<string, string> = {
   'project_visibility': 'project_visibility',
   'table_permissions': 'table_permissions',
   'profiles': 'profiles',
+  // Module 1: Governance, Partners, Staffing
+  'partner_registry': 'ol_partner_registry',
+  'staff_master': 'ol_staff_master',
+  'staff_hierarchy': 'ol_staff_hierarchy',
+  // Module 2: LogFrame and Performance
+  'logframe_hierarchy': 'ol_logframe_hierarchy',
+  'indicator_catalog_v2': 'ol_indicator_catalog_v2',
+  'target_baseline_registry': 'ol_target_baseline_registry',
+  // Module 3: Operations and Activity
+  'activity_log': 'ol_activity_log',
+  'training_registry_v2': 'ol_training_registry_v2',
+  'asset_inventory': 'ol_asset_inventory',
+  // Module 4: Beneficiary and Impact
+  'beneficiary_registry': 'ol_beneficiary_registry',
+  'clinical_observations': 'ol_clinical_observations',
+  'screening_event_log': 'ol_screening_event_log',
+  'groups_registry_v2': 'ol_groups_registry_v2',
+  'livelihood_activity_tracker': 'ol_livelihood_activity_tracker',
+  'financial_inclusion_log': 'ol_financial_inclusion_log',
+  'socio_economic_tracker': 'ol_socio_economic_tracker',
+  // Module 5: Accountability and Learning
+  'feedback_log': 'ol_feedback_log',
+  'safeguarding_log': 'ol_safeguarding_log',
+  'risk_management_matrix': 'ol_risk_management_matrix',
+  'training_capacity_registry': 'ol_training_capacity_registry',
+  // Geographical and Infrastructure
+  'spatial_hierarchy': 'ol_spatial_hierarchy',
+  'infrastructure_inventory': 'ol_infrastructure_inventory',
 };
 
 function resolveTableName(collectionName: string): string {
