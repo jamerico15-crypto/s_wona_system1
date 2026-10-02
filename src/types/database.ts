@@ -1,4 +1,4 @@
-export type NocoBaseInterface =
+export type FieldInterface =
   | 'input'
   | 'textarea'
   | 'integer'
@@ -36,17 +36,17 @@ export type NocoBaseInterface =
   | 'id'
   | string;
 
-export interface NocoBaseFieldOption {
+export interface FieldOption {
   label: string;
   value: string | number | boolean;
   color?: string;
 }
 
-export interface NocoBaseField {
+export interface FieldDef {
   key: string;
   name: string;
   type: string;
-  interface: NocoBaseInterface;
+  interface: FieldInterface;
   title: string | null;
   description: string | null;
   collectionName: string;
@@ -54,7 +54,7 @@ export interface NocoBaseField {
   sourceKey?: string;
   foreignKey?: string;
   targetKey?: string;
-  enum?: NocoBaseFieldOption[];
+  enum?: FieldOption[];
   allowNull?: boolean;
   required?: boolean;
   primaryKey?: boolean;
@@ -65,7 +65,7 @@ export interface NocoBaseField {
   field?: string;
 }
 
-export interface NocoBaseCollection {
+export interface TableCollection {
   key: string;
   name: string;
   title: string | null;
@@ -79,7 +79,7 @@ export interface NocoBaseCollection {
   unavailableActions?: string[];
 }
 
-export interface NocoBaseListResponse<T> {
+export interface ListResponse<T> {
   data: T[];
   meta: {
     count: number;
@@ -89,7 +89,7 @@ export interface NocoBaseListResponse<T> {
   };
 }
 
-export interface NocoBaseRecordList {
+export interface RecordList {
   data: Record<string, unknown>[];
   meta: {
     count: number;

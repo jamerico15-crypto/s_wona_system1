@@ -29,7 +29,7 @@ export interface ProjectContextValue {
   tablePrefix: string;
 }
 
-const STORAGE_KEY = 'nocobase_active_project';
+const STORAGE_KEY = 'supabase_active_project';
 
 export const ProjectContext = createContext<ProjectContextValue | null>(null);
 

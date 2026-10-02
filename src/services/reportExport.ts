@@ -7,12 +7,12 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { saveAs } from 'file-saver';
 import { TLM_PRIMARY, TLM_PRIMARY_DARK, TLM_SECONDARY } from '@/config/theme';
-import type { NocoBaseField } from '@/types/nocodb';
+import type { FieldDef } from '@/types/database';
 
 export interface ReportData {
   headers: string[];
   rows: (string | number | null)[][];
-  fields: NocoBaseField[];
+  fields: FieldDef[];
   tableName: string;
   narrative: string;
   chartImages: string[];
@@ -20,14 +20,14 @@ export interface ReportData {
   language: 'pt' | 'en';
 }
 
-function fieldLabel(field: NocoBaseField): string {
+function fieldLabel(field: FieldDef): string {
   if (field.title) {
     return field.title.replace(/\{\{t\(["'](.+?)["']\)\}\}/g, (_, s) => s);
   }
   return field.name;
 }
 
-function formatCellValue(value: unknown, field: NocoBaseField): string | number | null {
+function formatCellValue(value: unknown, field: FieldDef): string | number | null {
   if (value == null) return null;
   if (typeof value === 'number') return value;
   if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
@@ -56,13 +56,13 @@ function formatCellValue(value: unknown, field: NocoBaseField): string | number 
   return String(value);
 }
 
-function buildHeaders(fields: NocoBaseField[]): string[] {
+function buildHeaders(fields: FieldDef[]): string[] {
   return fields.map(fieldLabel);
 }
 
 function buildRows(
   records: Record<string, unknown>[],
-  fields: NocoBaseField[],
+  fields: FieldDef[],
 ): (string | number | null)[][] {
   return records.map((rec) =>
     fields.map((f) => formatCellValue(rec[f.name], f)),
@@ -71,7 +71,7 @@ function buildRows(
 
 export function prepareReportData(
   records: Record<string, unknown>[],
-  fields: NocoBaseField[],
+  fields: FieldDef[],
   tableName: string,
   narrative: string,
   chartImages: string[],

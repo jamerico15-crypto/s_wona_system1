@@ -5,7 +5,7 @@ import {
   fetchVisibilitySettings,
   upsertVisibilitySetting,
   type VisibilitySettingRow,
-} from '@/services/nocodb';
+} from '@/services/database';
 
 export type Density = 'compact' | 'comfortable';
 

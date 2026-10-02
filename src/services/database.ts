@@ -1,28 +1,27 @@
 import { supabase } from '@/services/supabase';
 import { isGlobalTable } from '@/config/projectConfig';
 import type {
-  NocoBaseCollection,
-  NocoBaseField,
-  NocoBaseListResponse,
-  NocoBaseRecordList,
-} from '@/types/nocodb';
+  TableCollection,
+  FieldDef,
+  RecordList,
+} from '@/types/database';
 
-export type { NocoBaseCollection, NocoBaseField, NocoBaseListResponse, NocoBaseRecordList };
+export type { TableCollection, FieldDef, RecordList };
 
-// ─── Error class (preserved for backwards compatibility) ──────────────────
+// ─── Error class ───────────────────────────────────────────────────────────
 
-export class NocoDBError extends Error {
+export class DatabaseError extends Error {
   status: number;
   isCors: boolean;
   constructor(message: string, status = 0, isCors = false) {
     super(message);
-    this.name = 'NocoDBError';
+    this.name = 'DatabaseError';
     this.status = status;
     this.isCors = isCors;
   }
 }
 
-// ─── Config (always configured — Supabase is provisioned) ──────────────────
+// ─── Config ────────────────────────────────────────────────────────────────
 
 function isConfigured(): boolean {
   return true;
@@ -34,7 +33,7 @@ function getConfigStatus(): { configured: boolean; missing: string[] } {
 
 // ─── Table registry: maps logical names to Supabase table names ────────────
 
-const OLIKANASSA_TABLE_MAP: Record<string, string> = {
+const TABLE_MAP: Record<string, string> = {
   'projetos': 'projetos',
   'goals': 'ol_goals',
   'despesas': 'ol_despesas',
@@ -72,20 +71,17 @@ const OLIKANASSA_TABLE_MAP: Record<string, string> = {
   'project_table_visibility': 'project_table_visibility',
   'project_visibility': 'project_visibility',
   'table_permissions': 'table_permissions',
+  'profiles': 'profiles',
 };
 
-const REVERSE_TABLE_MAP: Record<string, string> = Object.fromEntries(
-  Object.entries(OLIKANASSA_TABLE_MAP).map(([logical, physical]) => [physical, logical])
-);
-
 function resolveTableName(collectionName: string): string {
-  return OLIKANASSA_TABLE_MAP[collectionName] ?? collectionName;
+  return TABLE_MAP[collectionName] ?? collectionName;
 }
 
 // ─── Collections (table metadata) ──────────────────────────────────────────
 
-export async function fetchCollections(signal?: AbortSignal): Promise<NocoBaseCollection[]> {
-  const tableNames = Object.keys(OLIKANASSA_TABLE_MAP);
+export async function fetchCollections(signal?: AbortSignal): Promise<TableCollection[]> {
+  const tableNames = Object.keys(TABLE_MAP);
   return tableNames.map((name) => ({
     key: name,
     name,
@@ -96,27 +92,27 @@ export async function fetchCollections(signal?: AbortSignal): Promise<NocoBaseCo
   }));
 }
 
-export async function fetchCollectionsByPrefix(prefix: string, signal?: AbortSignal): Promise<NocoBaseCollection[]> {
+export async function fetchCollectionsByPrefix(prefix: string, signal?: AbortSignal): Promise<TableCollection[]> {
   const all = await fetchCollections(signal);
   if (!prefix) return all;
   return all.filter((c) => c.name.startsWith(prefix));
 }
 
-export async function fetchOlikanassaCollections(signal?: AbortSignal): Promise<NocoBaseCollection[]> {
+export async function fetchOlikanassaCollections(signal?: AbortSignal): Promise<TableCollection[]> {
   return fetchCollections(signal);
 }
 
 export async function fetchCollectionsForProject(
   prefixes: string[],
   opts: { includeMaster?: boolean; signal?: AbortSignal } = {},
-): Promise<NocoBaseCollection[]> {
+): Promise<TableCollection[]> {
   const { includeMaster = false, signal } = opts;
 
   if (prefixes.length === 0) {
     return fetchOlikanassaCollections(signal);
   }
 
-  const results: NocoBaseCollection[] = [];
+  const results: TableCollection[] = [];
   for (const prefix of prefixes) {
     try {
       const cols = await fetchCollectionsByPrefix(prefix, signal);
@@ -126,7 +122,6 @@ export async function fetchCollectionsForProject(
     }
   }
 
-  // Always include global/shared tables
   try {
     const all = await fetchCollections(signal);
     const existing = new Set(results.map((c) => c.name));
@@ -161,11 +156,10 @@ export async function fetchCollectionsForProject(
 export async function fetchFields(
   collectionName: string,
   signal?: AbortSignal,
-): Promise<NocoBaseField[]> {
+): Promise<FieldDef[]> {
   const tableName = resolveTableName(collectionName);
   const { data, error } = await supabase.rpc('get_table_columns', { table_name: tableName });
   if (error) {
-    // Fallback: return empty — the UI will handle it
     return [];
   }
   return (data ?? []).map((col: Record<string, string>) => ({
@@ -184,9 +178,8 @@ export async function createCollection(
   tableName: string,
   title: string,
   signal?: AbortSignal,
-): Promise<NocoBaseCollection> {
-  // In Supabase, table creation requires a migration — not supported at runtime
-  throw new NocoDBError('Criacao de tabelas nao suportada no Supabase. Use uma migracao.', 403);
+): Promise<TableCollection> {
+  throw new DatabaseError('Criacao de tabelas nao suportada no Supabase. Use uma migracao.', 403);
 }
 
 export async function createField(
@@ -194,11 +187,11 @@ export async function createField(
   field: { name: string; interface: string; type: string; uiSchema?: Record<string, unknown> },
   signal?: AbortSignal,
 ): Promise<void> {
-  throw new NocoDBError('Criacao de campos nao suportada no Supabase. Use uma migracao.', 403);
+  throw new DatabaseError('Criacao de campos nao suportada no Supabase. Use uma migracao.', 403);
 }
 
 export async function deleteCollection(collectionName: string, signal?: AbortSignal): Promise<void> {
-  throw new NocoDBError('Remocao de tabelas nao suportada no Supabase. Use uma migracao.', 403);
+  throw new DatabaseError('Remocao de tabelas nao suportada no Supabase. Use uma migracao.', 403);
 }
 
 // ─── Records CRUD ──────────────────────────────────────────────────────────
@@ -212,17 +205,15 @@ export async function fetchRecords(
     filter?: Record<string, unknown>;
     signal?: AbortSignal;
   },
-): Promise<NocoBaseRecordList> {
+): Promise<RecordList> {
   const tableName = resolveTableName(collectionName);
   const offset = (params.page - 1) * params.pageSize;
 
   let query = supabase.from(tableName).select('*', { count: 'exact' });
 
-  // Apply simple equality filters
   if (params.filter) {
     for (const [key, value] of Object.entries(params.filter)) {
       if (key === '$or' && Array.isArray(value)) {
-        // Use .or() with column=value pairs
         const orParts = value.map((f: Record<string, unknown>) => {
           return Object.entries(f).map(([k, v]) => `${k}.eq.${v}`).join(',');
         }).join(',');
@@ -250,7 +241,7 @@ export async function fetchRecords(
 
   const { data, error, count } = await query;
 
-  if (error) throw new NocoDBError(`Erro ao ler registos: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao ler registos: ${error.message}`, 0);
 
   const total = count ?? 0;
   const totalPage = Math.ceil(total / params.pageSize) || 1;
@@ -273,7 +264,7 @@ export async function createRecord(
 ): Promise<Record<string, unknown>> {
   const tableName = resolveTableName(collectionName);
   const { data, error } = await supabase.from(tableName).insert(values).select().single();
-  if (error) throw new NocoDBError(`Erro ao criar registo: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao criar registo: ${error.message}`, 0);
   return data as Record<string, unknown>;
 }
 
@@ -290,7 +281,7 @@ export async function updateRecord(
     .eq('id', recordId)
     .select()
     .single();
-  if (error) throw new NocoDBError(`Erro ao atualizar registo: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao atualizar registo: ${error.message}`, 0);
   return data as Record<string, unknown>;
 }
 
@@ -301,32 +292,32 @@ export async function deleteRecord(
 ): Promise<void> {
   const tableName = resolveTableName(collectionName);
   const { error } = await supabase.from(tableName).delete().eq('id', recordId);
-  if (error) throw new NocoDBError(`Erro ao eliminar registo: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao eliminar registo: ${error.message}`, 0);
 }
 
 // ─── Auth ──────────────────────────────────────────────────────────────────
 
-export interface NocoBaseRole {
+export interface RoleDef {
   name: string;
   title: string | null;
   hidden?: boolean;
 }
 
-export interface NocoBaseUser {
+export interface AppUser {
   id: string | number;
   email: string;
   nickname: string | null;
   username: string | null;
-  roles: NocoBaseRole[];
+  roles: RoleDef[];
 }
 
 export async function signIn(
   email: string,
   password: string,
-): Promise<{ user: NocoBaseUser; token: string }> {
+): Promise<{ user: AppUser; token: string }> {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) {
-    throw new NocoDBError(
+    throw new DatabaseError(
       `Erro de autenticacao: ${error.message}`,
       error.status ?? 401,
     );
@@ -335,8 +326,7 @@ export async function signIn(
   const session = data.session!;
   const authUser = data.user!;
 
-  // Fetch project role from usuarios_projetos
-  let roles: NocoBaseRole[] = [];
+  let roles: RoleDef[] = [];
   try {
     const projectRole = await fetchProjectRole(authUser.id);
     if (projectRole) {
@@ -346,7 +336,6 @@ export async function signIn(
     // ignore
   }
 
-  // Check if user is admin via user metadata or default to editor
   const userRole = (authUser.user_metadata?.role as string) ?? null;
   if (userRole && !roles.some((r) => r.name === userRole)) {
     roles = [...roles, { name: userRole, title: null }];
@@ -355,7 +344,7 @@ export async function signIn(
     roles = [{ name: 'editor', title: null }];
   }
 
-  const user: NocoBaseUser = {
+  const user: AppUser = {
     id: authUser.id,
     email: authUser.email ?? email,
     nickname: (authUser.user_metadata?.nickname as string) ?? null,
@@ -366,7 +355,7 @@ export async function signIn(
   return { user, token: session.access_token };
 }
 
-async function fetchProjectRole(userId: string | number): Promise<NocoBaseRole | null> {
+async function fetchProjectRole(userId: string | number): Promise<RoleDef | null> {
   const { data, error } = await supabase
     .from('usuarios_projetos')
     .select('role_no_projeto')
@@ -378,11 +367,11 @@ async function fetchProjectRole(userId: string | number): Promise<NocoBaseRole |
   return { name: roleName, title: null };
 }
 
-export async function checkAuth(token: string): Promise<NocoBaseUser> {
+export async function checkAuth(token: string): Promise<AppUser> {
   const { data: { user: authUser }, error } = await supabase.auth.getUser(token);
-  if (error || !authUser) throw new NocoDBError('Sessao expirada.', 401);
+  if (error || !authUser) throw new DatabaseError('Sessao expirada.', 401);
 
-  let roles: NocoBaseRole[] = [];
+  let roles: RoleDef[] = [];
   try {
     const projectRole = await fetchProjectRole(authUser.id);
     if (projectRole) roles = [projectRole];
@@ -407,20 +396,22 @@ export async function checkAuth(token: string): Promise<NocoBaseUser> {
   };
 }
 
-export async function fetchUsers(signal?: AbortSignal): Promise<NocoBaseUser[]> {
-  const { data: { users }, error } = await supabase.auth.admin.listUsers();
-  if (error) throw new NocoDBError(`Erro ao listar utilizadores: ${error.message}`, 0);
+export async function fetchUsers(signal?: AbortSignal): Promise<AppUser[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, nickname, role');
+  if (error) throw new DatabaseError(`Erro ao listar utilizadores: ${error.message}`, 0);
 
-  return (users ?? []).map((u) => ({
+  return (data ?? []).map((u) => ({
     id: u.id,
     email: u.email ?? '',
-    nickname: (u.user_metadata?.nickname as string) ?? null,
-    username: (u.user_metadata?.username as string) ?? null,
-    roles: [{ name: (u.user_metadata?.role as string) ?? 'editor', title: null }],
+    nickname: u.nickname ?? null,
+    username: null,
+    roles: [{ name: u.role ?? 'editor', title: null }],
   }));
 }
 
-export interface NocoBaseUserWithProject {
+export interface UserWithProject {
   id: string | number;
   nickname: string | null;
   email: string;
@@ -429,21 +420,23 @@ export interface NocoBaseUserWithProject {
   active_project: { id: string | number; nome: string } | null;
 }
 
-export async function fetchUsersWithProjects(signal?: AbortSignal): Promise<NocoBaseUserWithProject[]> {
-  const { data: { users }, error } = await supabase.auth.admin.listUsers();
-  if (error) throw new NocoDBError(`Erro ao listar utilizadores: ${error.message}`, 0);
+export async function fetchUsersWithProjects(signal?: AbortSignal): Promise<UserWithProject[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, nickname, role, active_project_id');
+  if (error) throw new DatabaseError(`Erro ao listar utilizadores: ${error.message}`, 0);
 
-  return (users ?? []).map((u) => ({
+  return (data ?? []).map((u) => ({
     id: u.id,
-    nickname: (u.user_metadata?.nickname as string) ?? null,
+    nickname: u.nickname ?? null,
     email: u.email ?? '',
-    roles: (u.user_metadata?.role as string) ?? null,
-    active_project_id: (u.user_metadata?.active_project_id as string | number) ?? null,
+    roles: u.role ?? null,
+    active_project_id: u.active_project_id ?? null,
     active_project: null,
   }));
 }
 
-export async function fetchRoles(signal?: AbortSignal): Promise<NocoBaseRole[]> {
+export async function fetchRoles(signal?: AbortSignal): Promise<RoleDef[]> {
   return [
     { name: 'super_admin', title: 'Super Administrador' },
     { name: 'admin', title: 'Administrador' },
@@ -460,15 +453,21 @@ export async function setUserRole(
   roleName: string,
   token?: string | null,
 ): Promise<void> {
-  const { error } = await supabase.auth.admin.updateUserById(String(userId), {
+  const { error: profileErr } = await supabase
+    .from('profiles')
+    .update({ role: roleName })
+    .eq('id', String(userId));
+  if (profileErr) throw new DatabaseError(`Erro ao definir role: ${profileErr.message}`, 0);
+
+  const { error: authErr } = await supabase.auth.admin.updateUserById(String(userId), {
     user_metadata: { role: roleName },
   });
-  if (error) throw new NocoDBError(`Erro ao definir role: ${error.message}`, 0);
+  if (authErr) throw new DatabaseError(`Erro ao atualizar utilizador: ${authErr.message}`, 0);
 }
 
-// ─── Role permissions (legacy stubs) ───────────────────────────────────────
+// ─── Role permissions ──────────────────────────────────────────────────────
 
-export interface NocoBaseRolePermission {
+export interface RolePermission {
   role_name: string;
   resources: Record<string, { actions: string[]; scope?: string }>;
 }
@@ -476,22 +475,22 @@ export interface NocoBaseRolePermission {
 export async function fetchRolePermissions(
   roleName?: string,
   signal?: AbortSignal,
-): Promise<NocoBaseRolePermission[]> {
+): Promise<RolePermission[]> {
   return [];
 }
 
 export async function fetchRoleWithPermissions(
   roleName: string,
   signal?: AbortSignal,
-): Promise<NocoBaseRole & { permissions?: NocoBaseRolePermission }> {
+): Promise<RoleDef & { permissions?: RolePermission }> {
   const role = (await fetchRoles(signal)).find((r) => r.name === roleName);
-  if (!role) throw new NocoDBError(`Role "${roleName}" nao encontrada.`, 404);
+  if (!role) throw new DatabaseError(`Role "${roleName}" nao encontrada.`, 404);
   return { ...role, permissions: undefined };
 }
 
 // ─── Branding ──────────────────────────────────────────────────────────────
 
-export interface NocoBaseAttachment {
+export interface Attachment {
   id: string | number;
   url: string;
   filename: string | null;
@@ -501,7 +500,7 @@ export interface NocoBaseAttachment {
 
 export interface BrandingRecord {
   id: string | number;
-  logo: NocoBaseAttachment[] | null;
+  logo: Attachment[] | null;
   login_title: string;
   login_subtitle: string;
   login_button_text: string;
@@ -527,12 +526,12 @@ export async function fetchBrandingSettings(signal?: AbortSignal): Promise<Brand
   }
 }
 
-export async function uploadAttachment(file: File, signal?: AbortSignal): Promise<NocoBaseAttachment> {
+export async function uploadAttachment(file: File, signal?: AbortSignal): Promise<Attachment> {
   const fileName = `logos/${Date.now()}-${file.name}`;
   const { error: uploadErr } = await supabase.storage
     .from('attachments')
     .upload(fileName, file);
-  if (uploadErr) throw new NocoDBError(`Erro ao enviar ficheiro: ${uploadErr.message}`, 0);
+  if (uploadErr) throw new DatabaseError(`Erro ao enviar ficheiro: ${uploadErr.message}`, 0);
 
   const { data: urlData } = supabase.storage
     .from('attachments')
@@ -548,7 +547,7 @@ export async function uploadAttachment(file: File, signal?: AbortSignal): Promis
 }
 
 export async function saveBrandingSettings(
-  values: { logo: NocoBaseAttachment[] | null; login_title: string; login_subtitle: string; login_button_text: string },
+  values: { logo: Attachment[] | null; login_title: string; login_subtitle: string; login_button_text: string },
   signal?: AbortSignal,
 ): Promise<void> {
   const logoUrl = values.logo?.[0]?.url ?? null;
@@ -562,7 +561,7 @@ export async function saveBrandingSettings(
       login_button_text: values.login_button_text,
       updated_at: new Date().toISOString(),
     });
-  if (error) throw new NocoDBError(`Erro ao guardar branding: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao guardar branding: ${error.message}`, 0);
 }
 
 export async function resetBrandingSettings(signal?: AbortSignal): Promise<void> {
@@ -681,7 +680,7 @@ export async function fetchTablePermissions(
   let query = supabase.from('table_permissions').select('*');
   if (roleName) query = query.eq('role_name', roleName);
   const { data, error } = await query;
-  if (error) throw new NocoDBError(`Erro ao ler permissoes: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao ler permissoes: ${error.message}`, 0);
   return (data ?? []).map((r) => ({
     id: r.id,
     role_name: r.role_name,
@@ -714,14 +713,14 @@ export async function upsertTablePermission(
     .eq('collection_name', collectionName)
     .maybeSingle();
 
-  if (fetchErr) throw new NocoDBError(`Erro ao procurar permissao: ${fetchErr.message}`, 0);
+  if (fetchErr) throw new DatabaseError(`Erro ao procurar permissao: ${fetchErr.message}`, 0);
 
   if (existing) {
     const { error: updateErr } = await supabase
       .from('table_permissions')
       .update({ [col]: value, updated_at: new Date().toISOString() })
       .eq('id', existing.id);
-    if (updateErr) throw new NocoDBError(`Erro ao atualizar permissao: ${updateErr.message}`, 0);
+    if (updateErr) throw new DatabaseError(`Erro ao atualizar permissao: ${updateErr.message}`, 0);
   } else {
     const row: Record<string, unknown> = {
       role_name: roleName,
@@ -735,7 +734,7 @@ export async function upsertTablePermission(
     const { error: insertErr } = await supabase
       .from('table_permissions')
       .insert(row);
-    if (insertErr) throw new NocoDBError(`Erro ao criar permissao: ${insertErr.message}`, 0);
+    if (insertErr) throw new DatabaseError(`Erro ao criar permissao: ${insertErr.message}`, 0);
   }
 }
 
@@ -748,7 +747,7 @@ export async function deleteTablePermission(
     .delete()
     .eq('role_name', roleName)
     .eq('collection_name', collectionName);
-  if (error) throw new NocoDBError(`Erro ao remover permissao: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao remover permissao: ${error.message}`, 0);
 }
 
 export async function fetchPermissionsForRole(
@@ -761,7 +760,7 @@ export async function fetchPermissionsForRole(
     .eq('role_name', roleName)
     .eq('collection_name', collectionName)
     .maybeSingle();
-  if (error) throw new NocoDBError(`Erro ao ler permissao: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao ler permissao: ${error.message}`, 0);
   if (!data) return null;
   return {
     id: data.id,
@@ -774,7 +773,7 @@ export async function fetchPermissionsForRole(
   };
 }
 
-// ─── Per-project credential loading & access validation ──────────────────
+// ─── Per-project credential loading & access validation ────────────────────
 
 export interface ProjectCredentials {
   baseId: string | null;
@@ -891,16 +890,27 @@ export async function fetchAllUserProjectAssignments(signal?: AbortSignal): Prom
     `);
   if (error) return [];
 
-  // Fetch user emails from auth
   const userIds = [...new Set((data ?? []).map((r) => String(r.usuario_fkey)))];
+
+  const profileMap = new Map<string, { email: string; nickname: string | null }>();
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, email, nickname')
+      .in('id', userIds);
+    for (const p of profiles ?? []) {
+      profileMap.set(p.id, { email: p.email ?? '', nickname: p.nickname ?? null });
+    }
+  }
 
   return (data ?? []).map((r) => {
     const proj = r.projetos as unknown as Record<string, unknown> | null;
+    const profile = profileMap.get(String(r.usuario_fkey));
     return {
       id: r.id as string,
       userId: r.usuario_fkey as string,
-      userEmail: '',
-      userNickname: null,
+      userEmail: profile?.email ?? '',
+      userNickname: profile?.nickname ?? null,
       projectId: (proj?.id ?? '') as string,
       projectName: (proj?.nome as string) ?? 'Projeto',
       role: (r.role_no_projeto as string) ?? null,
@@ -923,7 +933,7 @@ export async function createUserProjectAssignment(
     })
     .select()
     .single();
-  if (error) throw new NocoDBError(`Erro ao criar atribuicao: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao criar atribuicao: ${error.message}`, 0);
   return data as Record<string, unknown>;
 }
 
@@ -936,7 +946,7 @@ export async function updateUserProjectAssignmentRole(
     .from('usuarios_projetos')
     .update({ role_no_projeto: role, updated_at: new Date().toISOString() })
     .eq('id', String(assignmentId));
-  if (error) throw new NocoDBError(`Erro ao atualizar atribuicao: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao atualizar atribuicao: ${error.message}`, 0);
 }
 
 export async function deleteUserProjectAssignment(
@@ -947,7 +957,7 @@ export async function deleteUserProjectAssignment(
     .from('usuarios_projetos')
     .delete()
     .eq('id', String(assignmentId));
-  if (error) throw new NocoDBError(`Erro ao eliminar atribuicao: ${error.message}`, 0);
+  if (error) throw new DatabaseError(`Erro ao eliminar atribuicao: ${error.message}`, 0);
 }
 
 // ─── Project table visibility (stored in Supabase) ─────────────────────────
@@ -1061,7 +1071,7 @@ export async function fetchAllProjectTableVisibility(
   }
 }
 
-// ─── Project visibility per user (stored in Supabase) ─────────────────────
+// ─── Project visibility per user (stored in Supabase) ──────────────────────
 
 export interface ProjectVisibilityRow {
   id?: string | number;
